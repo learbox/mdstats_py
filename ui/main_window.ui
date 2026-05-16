@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QWidget" name="centralWidget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1100</width>
+    <height>700</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>MD Stats</string>
+  </property>
+  <layout class="QVBoxLayout" name="rootLayout">
+   <item>
+    <layout class="QHBoxLayout" name="ctrlLayout">
+     <item>
+      <widget class="QPushButton" name="btn_start">
+       <property name="text">
+        <string>启动</string>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton { background-color: #4CAF50; color: white; font-weight: bold; padding: 6px 20px; }
+QPushButton:disabled { background-color: #9E9E9E; }</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_stop">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+       <property name="text">
+        <string>停止</string>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton { background-color: #F44336; color: white; font-weight: bold; padding: 6px 20px; }
+QPushButton:disabled { background-color: #9E9E9E; }</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="spacerCtrl1">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeType">
+        <enum>QSizePolicy::Fixed</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>20</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QLabel" name="label_deck">
+       <property name="text">
+        <string>使用卡组:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="deck_input">
+       <property name="maximumSize">
+        <size>
+         <width>160</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="placeholderText">
+        <string>输入当前使用的卡组名称</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="spacerCtrl2">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeType">
+        <enum>QSizePolicy::Fixed</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>20</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_manual_win">
+       <property name="text">
+        <string>赢硬币</string>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton { background-color: #FF9800; color: white; font-weight: bold; padding: 4px 12px; }</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_manual_lose">
+       <property name="text">
+        <string>输硬币</string>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton { background-color: #FF9800; color: white; font-weight: bold; padding: 4px 12px; }</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="spacerCtrlStretch">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QSplitter" name="splitter">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <widget class="QTableWidget" name="stats_table">
+      <property name="editTriggers">
+       <set>QAbstractItemView::NoEditTriggers</set>
+      </property>
+      <property name="selectionBehavior">
+       <enum>QAbstractItemView::SelectRows</enum>
+      </property>
+     </widget>
+     <widget class="QTableWidget" name="record_table">
+      <property name="selectionBehavior">
+       <enum>QAbstractItemView::SelectRows</enum>
+      </property>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="bottomLayout">
+     <item>
+      <widget class="QPushButton" name="btn_reload">
+       <property name="text">
+        <string>加载数据</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_copy">
+       <property name="text">
+        <string>复制到剪贴板</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_open_csv">
+       <property name="text">
+        <string>打开 data.csv 目录</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_edit_config">
+       <property name="text">
+        <string>编辑配置</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_reload_config">
+       <property name="text">
+        <string>重新载入配置</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="spacerBottomStretch">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
