@@ -65,26 +65,28 @@
 """
 
 
+import ctypes
 import json
 import os
 import subprocess
 from pathlib import Path
 from typing import Any, TypeVar
 
-from PySide6.QtCore import QFile, Qt, QTimer
+from PySide6.QtCore import QEvent, QFile, Qt, QTimer
+from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtUiTools import QUiLoader
-from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QFileDialog,
+    QFrame,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
     QSplitter,
-    QStatusBar,
     QStyledItemDelegate,
     QTableWidget,
     QTableWidgetItem,
@@ -104,6 +106,8 @@ from src.recorder import (
 )
 from src.capture import get_window_status, is_window_open
 from src.stats_worker import StatsWorker
+from src.theme_loader import Theme, load_theme
+from ui.titlebar import TitleBar
 
 # .ui 界面文件的绝对路径
 UI_FILE = Path(__file__).resolve().parent / "main_window.ui"
@@ -195,6 +199,217 @@ class MainWindow(QMainWindow):
     通过 Qt 的信号/槽机制与后台工作线程通信。
     """
 
+    def _theme_colors(self) -> dict[str, str]:
+        """返回当前主题的颜色表（缓存在 self._colors 中）。"""
+        return self._colors
+
+    def _apply_theme_pixmaps(self, pixmaps: dict[str, str]) -> None:
+        self._pixmap_paths = pixmaps
+
+    def _do_apply_pixmaps(self) -> None:
+        """QPalette 设背景：关键控件先 QPalette 纯色，有图叠图。"""
+        main_bg = self._colors.get("main_bg", "#f5f6fa")
+        status_bg = self._colors.get("statusbar_bg", "#ecf0f1")
+
+        self._set_palette_bg(self._title_bar, None, main_bg)
+        self._set_palette_bg(self._status_frame, None, status_bg)
+        # content widget 从 QSS 中移掉 background-color，改用 QPalette
+        self._set_palette_bg(self._content, None, main_bg)
+
+        for selector, path in self._pixmap_paths.items():
+            pm = QPixmap(path)
+            if pm.isNull():
+                continue
+            if selector == "#contentWidget":
+                self._set_palette_bg(self._content, pm, main_bg)
+            elif selector == "#customStatusBar":
+                self._set_palette_bg(self._status_frame, pm, status_bg)
+            elif selector == "QTableWidget":
+                for table in (self._stats_table, self._record_table):
+                    self._set_palette_bg(table.viewport(), pm, main_bg)
+            elif selector == "QHeaderView::section":
+                for table in (self._stats_table, self._record_table):
+                    hh = table.horizontalHeader()
+                    self._set_palette_bg(hh, pm, main_bg)
+            elif selector == "QPushButton":
+                self._set_palette_bg(self._btn_start, pm, main_bg)
+
+    @staticmethod
+    def _set_palette_bg(widget, pm, fallback_color: str) -> None:
+        widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        widget.setAutoFillBackground(True)
+        p = widget.palette()
+        if pm is not None and not pm.isNull():
+            scaled = pm.scaled(widget.size(),
+                               Qt.AspectRatioMode.IgnoreAspectRatio,
+                               Qt.TransformationMode.SmoothTransformation)
+            p.setBrush(p.ColorRole.Window, scaled)
+        else:
+            p.setColor(p.ColorRole.Window, QColor(fallback_color))
+        widget.setPalette(p)
+
+    def _show_status(self, msg: str) -> None:
+        """更新状态栏消息。"""
+        self._status_label.setText(msg)
+
+    def _is_dark_theme(self) -> bool:
+        """判断当前是否为暗色主题。"""
+        return self._config.get("appearance", {}).get("theme", "dark") == "dark"
+
+    def _apply_dwm_style(self) -> None:
+        """DWM 原生阴影 + Windows 11 圆角（失败时静默跳过）。"""
+        if os.name != "nt":
+            return
+        try:
+            hwnd = int(self.winId())
+
+            class _MARGINS(ctypes.Structure):
+                _fields_ = [
+                    ("cxLeftWidth", ctypes.c_int),
+                    ("cxRightWidth", ctypes.c_int),
+                    ("cyTopHeight", ctypes.c_int),
+                    ("cyBottomHeight", ctypes.c_int),
+                ]
+            margins = _MARGINS(1, 1, 1, 1)
+            ctypes.windll.dwmapi.DwmExtendFrameIntoClientArea(
+                hwnd, ctypes.byref(margins),
+            )
+
+            # Windows 11 原生圆角
+            DWMWA_WINDOW_CORNER_PREFERENCE = 33
+            DWMWCP_ROUND = 2
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                hwnd, DWMWA_WINDOW_CORNER_PREFERENCE,
+                ctypes.byref(ctypes.c_int(DWMWCP_ROUND)),
+                ctypes.sizeof(ctypes.c_int),
+            )
+        except Exception:
+            pass
+
+    # ---- 无边框窗口 resize 支持 ----
+    _BORDER_WIDTH = 6
+    _resize_edge: Any = None  # Qt.Edge | None
+
+    def _edge_at(self, global_pos) -> Any:
+        """检测全局坐标是否在窗口边缘，返回 Qt.Edge 或 None。"""
+        geo = self.geometry()
+        bw = self._BORDER_WIDTH
+        x, y = global_pos.x(), global_pos.y()
+        left_edge = x < geo.x() + bw
+        right_edge = x >= geo.x() + geo.width() - bw
+        top_edge = y < geo.y() + bw
+        bottom_edge = y >= geo.y() + geo.height() - bw
+
+        if top_edge and left_edge:
+            return Qt.Edge.LeftEdge | Qt.Edge.TopEdge
+        if top_edge and right_edge:
+            return Qt.Edge.RightEdge | Qt.Edge.TopEdge
+        if bottom_edge and left_edge:
+            return Qt.Edge.LeftEdge | Qt.Edge.BottomEdge
+        if bottom_edge and right_edge:
+            return Qt.Edge.RightEdge | Qt.Edge.BottomEdge
+        if top_edge:
+            return Qt.Edge.TopEdge
+        if bottom_edge:
+            return Qt.Edge.BottomEdge
+        if left_edge:
+            return Qt.Edge.LeftEdge
+        if right_edge:
+            return Qt.Edge.RightEdge
+        return None
+
+    def eventFilter(self, watched, event) -> bool:
+        """将子控件的鼠标事件转发给窗口级 resize 检测。"""
+        from PySide6.QtCore import QEvent
+        t = event.type()
+        if t == QEvent.Type.MouseMove:
+            self._update_resize_cursor(event.globalPosition().toPoint())
+        elif t == QEvent.Type.MouseButtonPress:
+            edge = self._edge_at(event.globalPosition().toPoint())
+            if edge and self.windowHandle():
+                self.windowHandle().startSystemResize(edge)
+                return True
+        return False
+
+    def _update_resize_cursor(self, global_pos) -> None:
+        """根据鼠标在窗口边缘的位置更新光标。"""
+        edge = self._edge_at(global_pos)
+        if edge == Qt.Edge.LeftEdge or edge == Qt.Edge.RightEdge:
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+        elif edge == Qt.Edge.TopEdge or edge == Qt.Edge.BottomEdge:
+            self.setCursor(Qt.CursorShape.SizeVerCursor)
+        elif edge == (Qt.Edge.LeftEdge | Qt.Edge.TopEdge) or edge == (Qt.Edge.RightEdge | Qt.Edge.BottomEdge):
+            self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+        elif edge == (Qt.Edge.RightEdge | Qt.Edge.TopEdge) or edge == (Qt.Edge.LeftEdge | Qt.Edge.BottomEdge):
+            self.setCursor(Qt.CursorShape.SizeBDiagCursor)
+        else:
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+
+    def mousePressEvent(self, event) -> None:
+        """检测窗口边缘点击，触发系统 resize。"""
+        edge = self._edge_at(event.globalPosition().toPoint())
+        if edge and self.windowHandle():
+            self.windowHandle().startSystemResize(edge)
+        else:
+            super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        """鼠标移动时更新边缘光标。"""
+        self._update_resize_cursor(event.globalPosition().toPoint())
+        super().mouseMoveEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        """双击边缘区域不处理（仅标题栏双击可自定义）。"""
+        if self._edge_at(event.globalPosition().toPoint()):
+            return
+        super().mouseDoubleClickEvent(event)
+
+    @staticmethod
+    def _lighter(hex_color: str, factor: float = 0.25) -> str:
+        """将十六进制颜色向白色方向提亮 factor*100%%。"""
+        r = int(hex_color[1:3], 16)
+        g = int(hex_color[3:5], 16)
+        b = int(hex_color[5:7], 16)
+        r = min(255, int(r + (255 - r) * factor))
+        g = min(255, int(g + (255 - g) * factor))
+        b = min(255, int(b + (255 - b) * factor))
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    def _btn_style(self, bg: str, *, padding: str = "4px 14px") -> str:
+        """生成带 hover 高亮效果的动态按钮样式。"""
+        border = self._colors.get("border", "#dcdde1")
+        hover_bg = self._lighter(bg)
+        return (
+            f"QPushButton {{ background-color: {bg}; color: white; "
+            f"font-weight: bold; padding: {padding}; border-radius: 6px; "
+            f"border: 1px solid {border}; }}"
+            f"QPushButton:hover {{ background-color: {hover_bg}; "
+            f"border-color: {hover_bg}; }}"
+            "QPushButton:disabled { background-color: #9E9E9E; color: #e0e0e0; "
+            "border-color: #888; }"
+        )
+
+    def _apply_table_viewport_palette(self) -> None:
+        """直接给表格和表头的 viewport 设样式，杜绝任何空白变白。"""
+        base = self._colors.get("widget_bg", "#ffffff")
+        header_bg = self._colors.get("main_bg", "#f5f6fa")
+        # 亮色主题下表头用 statusbar_bg
+        if self._config.get("appearance", {}).get("theme", "dark") != "dark":
+            header_bg = self._colors.get("statusbar_bg", header_bg)
+
+        for table in (self._stats_table, self._record_table):
+            vp = table.viewport()
+            vp.setAutoFillBackground(True)
+            vp.setStyleSheet(f"background-color: {base};")
+
+            vh = table.verticalHeader()
+            vh.setAutoFillBackground(True)
+            vh.setStyleSheet(f"background-color: {header_bg};")
+
+            hh = table.horizontalHeader()
+            hh.setAutoFillBackground(True)
+            hh.setStyleSheet(f"background-color: {header_bg};")
+
     def __init__(self) -> None:
         """初始化主窗口：加载 .ui 界面文件、配置样式、连接信号、加载数据。"""
         super().__init__()
@@ -218,36 +433,74 @@ class MainWindow(QMainWindow):
         # 防止 refresh_record_table 触发的 cellChanged 写回 CSV
         self._suppress_cell_changed: bool = False
 
+        # ---- 加载主题 ----
+        theme: Theme = load_theme(
+            self._config.get("appearance", {}).get("theme", "dark")
+        )
+        self._colors = theme.colors
+        self._titlebar_cfg = theme.titlebar
+        self._assets_dir = theme.assets_dir
+        self.setStyleSheet(theme.qss)
+        self._apply_theme_pixmaps(theme.pixmaps)
+
+        # ---- 无边框窗口 + DWM 原生阴影 ----
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window
+        )
+        self.setMouseTracking(True)
+        self._apply_dwm_style()
+
         # ---- 从 .ui 文件加载界面 ----
         loader = QUiLoader()
         ui_file = QFile(str(UI_FILE))
         ui_file.open(QFile.OpenModeFlag.ReadOnly)
-        widget = loader.load(ui_file)
+        content = loader.load(ui_file)
         ui_file.close()
-        self.setCentralWidget(widget)
+        content.setObjectName("contentWidget")
+        self._content = content
+
+        # ---- 插入自定义标题栏 ----
+        self._title_bar = TitleBar(
+            "MD Stats", self._titlebar_cfg, self._assets_dir, self
+        )
+        self._title_bar.minimize_clicked.connect(self.showMinimized)
+        self._title_bar.close_clicked.connect(self.close)
+        root_layout = content.layout()
+        if root_layout is not None:
+            root_layout.insertWidget(0, self._title_bar)
+
+        self.setCentralWidget(content)
+
+        # 事件过滤器：让子控件的鼠标事件也能触发边缘 resize
+        content.setMouseTracking(True)
+        content.installEventFilter(self)
+
+        # ---- 窗口图标 ----
+        icon_path = self._assets_dir / "app_icon.png"
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
 
         # 通过 objectName 获取各个控件的引用
         # _require_widget 将 findChild 的 X | None 收窄为 X，消除类型警告
-        self._btn_start = _require_widget(widget.findChild(QPushButton, "btn_start"), "btn_start")
-        self._btn_stop = _require_widget(widget.findChild(QPushButton, "btn_stop"), "btn_stop")
-        self._deck_input = _require_widget(widget.findChild(QLineEdit, "deck_input"), "deck_input")
-        self._btn_manual_win = _require_widget(widget.findChild(QPushButton, "btn_manual_win"), "btn_manual_win")
-        self._btn_manual_lose = _require_widget(widget.findChild(QPushButton, "btn_manual_lose"), "btn_manual_lose")
-        self._btn_undo = _require_widget(widget.findChild(QPushButton, "btn_undo"), "btn_undo")
-        self._btn_lock_deck = _require_widget(widget.findChild(QPushButton, "btn_lock_deck"), "btn_lock_deck")
-        self._stats_table = _require_widget(widget.findChild(QTableWidget, "stats_table"), "stats_table")
-        self._record_table = _require_widget(widget.findChild(QTableWidget, "record_table"), "record_table")
-        self._btn_reload = _require_widget(widget.findChild(QPushButton, "btn_reload"), "btn_reload")
-        self._btn_copy = _require_widget(widget.findChild(QPushButton, "btn_copy"), "btn_copy")
-        self._btn_delete_last = _require_widget(widget.findChild(QPushButton, "btn_delete_last"), "btn_delete_last")
-        self._btn_about = _require_widget(widget.findChild(QPushButton, "btn_about"), "btn_about")
-        self._btn_open_csv = _require_widget(widget.findChild(QPushButton, "btn_open_csv"), "btn_open_csv")
-        self._btn_edit_config = _require_widget(widget.findChild(QPushButton, "btn_edit_config"), "btn_edit_config")
-        self._btn_reload_config = _require_widget(widget.findChild(QPushButton, "btn_reload_config"), "btn_reload_config")
-        self._splitter = _require_widget(widget.findChild(QSplitter, "splitter"), "splitter")
+        self._btn_start = _require_widget(content.findChild(QPushButton, "btn_start"), "btn_start")
+        self._btn_stop = _require_widget(content.findChild(QPushButton, "btn_stop"), "btn_stop")
+        self._deck_input = _require_widget(content.findChild(QLineEdit, "deck_input"), "deck_input")
+        self._btn_manual_win = _require_widget(content.findChild(QPushButton, "btn_manual_win"), "btn_manual_win")
+        self._btn_manual_lose = _require_widget(content.findChild(QPushButton, "btn_manual_lose"), "btn_manual_lose")
+        self._btn_undo = _require_widget(content.findChild(QPushButton, "btn_undo"), "btn_undo")
+        self._btn_lock_deck = _require_widget(content.findChild(QPushButton, "btn_lock_deck"), "btn_lock_deck")
+        self._stats_table = _require_widget(content.findChild(QTableWidget, "stats_table"), "stats_table")
+        self._record_table = _require_widget(content.findChild(QTableWidget, "record_table"), "record_table")
+        self._btn_reload = _require_widget(content.findChild(QPushButton, "btn_reload"), "btn_reload")
+        self._btn_copy = _require_widget(content.findChild(QPushButton, "btn_copy"), "btn_copy")
+        self._btn_delete_last = _require_widget(content.findChild(QPushButton, "btn_delete_last"), "btn_delete_last")
+        self._btn_about = _require_widget(content.findChild(QPushButton, "btn_about"), "btn_about")
+        self._btn_open_csv = _require_widget(content.findChild(QPushButton, "btn_open_csv"), "btn_open_csv")
+        self._btn_edit_config = _require_widget(content.findChild(QPushButton, "btn_edit_config"), "btn_edit_config")
+        self._btn_reload_config = _require_widget(content.findChild(QPushButton, "btn_reload_config"), "btn_reload_config")
+        self._splitter = _require_widget(content.findChild(QSplitter, "splitter"), "splitter")
 
         # ---- 窗口基础设置 ----
-        self.setWindowTitle("MD Stats")
         self.resize(
             self._config.get("window", {}).get("width", 1100),
             self._config.get("window", {}).get("height", 700),
@@ -272,11 +525,16 @@ class MainWindow(QMainWindow):
         self._stats_table.setColumnCount(len(STATS_COLUMNS))
         self._stats_table.setHorizontalHeaderLabels(STATS_COLUMNS)
         self._stats_table.horizontalHeader().setStretchLastSection(True)
+        self._stats_table.verticalHeader().setDefaultSectionSize(28)
 
         self._record_table.setColumnCount(len(RECORD_COLUMNS))
         self._record_table.setHorizontalHeaderLabels(RECORD_COLUMNS)
         self._record_table.setColumnHidden(0, True)  # 序号列不出现在界面中
         self._record_table.horizontalHeader().setStretchLastSection(True)
+        self._record_table.verticalHeader().setDefaultSectionSize(28)
+
+        # 修复表格空白区域背景色（QSS 可能无法覆盖 viewport 的 palette 色）
+        self._apply_table_viewport_palette()
 
         # ---- 记录表格列委托（下拉菜单） ----
         # 赢硬币 (列 5): 是/否 下拉
@@ -306,13 +564,21 @@ class MainWindow(QMainWindow):
         self._splitter.setStretchFactor(0, 2)
         self._splitter.setStretchFactor(1, 3)
 
-        # ---- 状态栏 ----
-        self._status_bar = QStatusBar()
-        self._status_bar.showMessage("就绪 — 请点击《启动》开始")
-        # 右下角信息标签（与状态消息同行，靠右显示）
+        # ---- 自定义状态栏（包在 content 内，共享阴影容器） ----
+        self._status_frame = QFrame()
+        self._status_frame.setObjectName("customStatusBar")
+        sf_layout = QHBoxLayout(self._status_frame)
+        sf_layout.setContentsMargins(12, 3, 12, 3)
+        sf_layout.setSpacing(10)
+
+        self._status_label = QLabel("就绪 — 请点击《启动》开始")
+        self._status_label.setObjectName("statusMessage")
+        sf_layout.addWidget(self._status_label, 1)
+
         self._info_label = QLabel()
-        self._status_bar.addPermanentWidget(self._info_label)
-        self.setStatusBar(self._status_bar)
+        sf_layout.addWidget(self._info_label)
+
+        root_layout.addWidget(self._status_frame)
 
         # ---- 右下角信息标签定时刷新 ----
         info_timer = QTimer(self)
@@ -324,7 +590,9 @@ class MainWindow(QMainWindow):
 
         # ---- 初始加载 CSV 数据并填充表格 ----
         self._reload_tables()
-        self._restore_column_widths()
+
+        # ---- 初始化手动按钮样式（阶段 0 = 橙色赢硬币/输硬币） ----
+        self._update_manual_buttons()
 
     # =========================================================================
     # 底部按钮状态管理
@@ -372,7 +640,7 @@ class MainWindow(QMainWindow):
         filename = Path(path).name
         set_active_csv(filename)  # type: ignore[reportUnknownMemberType]
         self._reload_tables()
-        self._status_bar.showMessage(f"已加载: {filename}")
+        self._show_status(f"已加载: {filename}")
 
     # =========================================================================
     # 启动 / 停止
@@ -392,7 +660,7 @@ class MainWindow(QMainWindow):
         # ---- 正在等待中，用户点击"终止等待" ----
         if self._wait_timer is not None:
             self._cancel_wait()
-            self._status_bar.showMessage("已取消等待 — 请先启动 Master Duel")
+            self._show_status("已取消等待 — 请先启动 Master Duel")
             return
 
         # ---- 窗口已存在，直接启动识别 ----
@@ -411,18 +679,17 @@ class MainWindow(QMainWindow):
         msg.exec()
 
         if msg.clickedButton() != btn_yes:
-            self._status_bar.showMessage("已取消 — 请先启动 Master Duel")
+            self._show_status("已取消 — 请先启动 Master Duel")
             return
 
         # ---- 用户选择启动游戏 ----
         os.startfile("steam://rungameid/1449850")
-        self._status_bar.showMessage("正在等待 Master Duel 启动…")
+        self._show_status("正在等待 Master Duel 启动…")
 
         # 将启动按钮改为"终止等待"
         self._btn_start.setText("终止等待")
         self._btn_start.setStyleSheet(
-            "QPushButton { background-color: #FF9800; color: white; "
-            "font-weight: bold; padding: 6px 20px; }"
+            self._btn_style(self._theme_colors()["warning_bg"], padding="6px 20px")
         )
         self._btn_start.setEnabled(True)
         self._btn_stop.setEnabled(False)
@@ -440,7 +707,7 @@ class MainWindow(QMainWindow):
             self._cancel_wait()
             self._start_worker()
         else:
-            self._status_bar.showMessage("正在等待 Master Duel 启动…")
+            self._show_status("正在等待 Master Duel 启动…")
 
     def _cancel_wait(self) -> None:
         """停止等待定时器，恢复启动按钮的原始状态。"""
@@ -448,11 +715,8 @@ class MainWindow(QMainWindow):
             self._wait_timer.stop()
             self._wait_timer = None
         self._btn_start.setText("启动")
-        self._btn_start.setStyleSheet(
-            "QPushButton { background-color: #4CAF50; color: white; "
-            "font-weight: bold; padding: 6px 20px; }"
-            "QPushButton:disabled { background-color: #9E9E9E; }"
-        )
+        colors = self._theme_colors()
+        self._btn_start.setStyleSheet(self._btn_style(colors["start_bg"], padding="6px 20px"))
         self._enable_bottom_buttons()
 
     def _start_worker(self) -> None:
@@ -474,6 +738,7 @@ class MainWindow(QMainWindow):
         self._btn_stop.setEnabled(True)
         self._lock_deck()
         self._disable_bottom_buttons()
+        self._update_manual_buttons()
 
     def _on_stop(self) -> None:
         """点击"停止"按钮: 停止并清理后台识别线程。
@@ -504,7 +769,7 @@ class MainWindow(QMainWindow):
 
         特殊处理：如果消息表明 Master Duel 已关闭，自动恢复按钮状态。
         """
-        self._status_bar.showMessage(msg)
+        self._show_status(msg)
         if msg.startswith("程序已关闭"):
             self._btn_start.setEnabled(True)
             self._btn_stop.setEnabled(False)
@@ -525,7 +790,7 @@ class MainWindow(QMainWindow):
         self._stage = 1
         self._update_manual_buttons()
         coin_text = "赢硬币" if coin_win == "win" else "输硬币"
-        self._status_bar.showMessage(f"已识别: {coin_text} — 等待先后攻…")
+        self._show_status(f"已识别: {coin_text} — 等待先后攻…")
 
     def _on_turn_detected(self, turn: str) -> None:
         """阶段 2 回调：自动识别到先后攻，缓存并同步手动按钮。
@@ -541,7 +806,7 @@ class MainWindow(QMainWindow):
         self._stage = 2
         self._update_manual_buttons()
         turn_text = "先攻" if turn == "first" else "后攻"
-        self._status_bar.showMessage(f"已识别: {turn_text} — 等待胜负…")
+        self._show_status(f"已识别: {turn_text} — 等待胜负…")
 
     def _on_result_detected(self, result: str) -> None:
         """阶段 3 回调：自动识别到胜负，取统一缓存写入 CSV。
@@ -555,7 +820,7 @@ class MainWindow(QMainWindow):
         self._reset_stage()
         self._reload_tables()
         result_text = "胜" if result == "win" else "负"
-        self._status_bar.showMessage(f"已记录: {result_text} — 等待下一局…")
+        self._show_status(f"已记录: {result_text} — 等待下一局…")
 
     # =========================================================================
     # 卡组输入锁定
@@ -576,11 +841,11 @@ class MainWindow(QMainWindow):
         if self._deck_input.isEnabled():
             self._deck_input.setEnabled(False)
             self._btn_lock_deck.setText("修改卡组")
-            self._status_bar.showMessage("卡组名已锁定")
+            self._show_status("卡组名已锁定")
         else:
             self._deck_input.setEnabled(True)
             self._btn_lock_deck.setText("锁定卡组")
-            self._status_bar.showMessage("卡组名已解锁 — 修改后请锁定")
+            self._show_status("卡组名已解锁 — 修改后请锁定")
 
     # =========================================================================
     # 手动添加记录（三步向导：赢硬币 → 先后攻 → 胜负）
@@ -604,7 +869,7 @@ class MainWindow(QMainWindow):
             self._update_manual_buttons()
             self._sync_worker_stage()
             coin_text = "赢硬币" if side == "win" else "输硬币"
-            self._status_bar.showMessage(f"手动: {coin_text} — 请选择先后攻")
+            self._show_status(f"手动: {coin_text} — 请选择先后攻")
 
         elif self._stage == 1:
             turn = "first" if side == "win" else "second"
@@ -613,7 +878,7 @@ class MainWindow(QMainWindow):
             self._update_manual_buttons()
             self._sync_worker_stage()
             turn_text = "先攻" if turn == "first" else "后攻"
-            self._status_bar.showMessage(f"手动: {turn_text} — 请选择胜负")
+            self._show_status(f"手动: {turn_text} — 请选择胜负")
 
         elif self._stage == 2:
             add_record(coin_win=self._coin_cache, turn=self._turn_cache, result=side, deck=self._deck_input.text().strip())  # type: ignore[reportUnknownMemberType]
@@ -621,7 +886,7 @@ class MainWindow(QMainWindow):
             self._sync_worker_stage()
             self._reload_tables()
             result_text = "胜" if side == "win" else "负"
-            self._status_bar.showMessage(f"手动添加: {result_text} — 已写入 CSV")
+            self._show_status(f"手动添加: {result_text} — 已写入 CSV")
 
     def _on_undo(self) -> None:
         """撤销上一阶段的选择，逐级回退并同步 worker。"""
@@ -634,7 +899,7 @@ class MainWindow(QMainWindow):
         self._update_manual_buttons()
         self._sync_worker_stage()
         label = {0: "硬币", 1: "先后攻"}[self._stage]
-        self._status_bar.showMessage(f"已撤销到: {label}")
+        self._show_status(f"已撤销到: {label}")
 
     def _sync_worker_stage(self) -> None:
         """将当前 _stage 同步到后台工作线程的状态机。"""
@@ -649,36 +914,25 @@ class MainWindow(QMainWindow):
         self._update_manual_buttons()
 
     def _update_manual_buttons(self) -> None:
-        """根据当前 _stage 更新手动按钮的文本、颜色及撤销按钮可见性。
-
-        按钮样式随阶段变化:
-            _stage==0 (硬币):  #FF9800 橙色 — 左=赢硬币, 右=输硬币, 撤销隐藏
-            _stage==1 (先后攻): #2196F3 蓝色 — 左=先攻, 右=后攻, 撤销可见
-            _stage==2 (胜负):   #4CAF50 绿色 / #F44336 红色 — 左=胜, 右=负, 撤销可见
-        """
+        """根据当前 _stage 更新手动按钮的文本、颜色及撤销按钮可见性。"""
+        colors = self._theme_colors()
         if self._stage == 0:
             left_text, right_text = "赢硬币", "输硬币"
-            left_color = right_color = "#FF9800"
+            left_color = right_color = colors["coin"]
             self._btn_undo.setVisible(False)
         elif self._stage == 1:
             left_text, right_text = "先攻", "后攻"
-            left_color = right_color = "#2196F3"
+            left_color = right_color = colors["turn"]
             self._btn_undo.setVisible(True)
         else:
             left_text, right_text = "胜", "负"
-            left_color, right_color = "#4CAF50", "#F44336"
+            left_color, right_color = colors["win"], colors["lose"]
             self._btn_undo.setVisible(True)
 
         self._btn_manual_win.setText(left_text)
-        self._btn_manual_win.setStyleSheet(
-            f"QPushButton {{ background-color: {left_color}; color: white; "
-            f"font-weight: bold; padding: 4px 12px; }}"
-        )
+        self._btn_manual_win.setStyleSheet(self._btn_style(left_color))
         self._btn_manual_lose.setText(right_text)
-        self._btn_manual_lose.setStyleSheet(
-            f"QPushButton {{ background-color: {right_color}; color: white; "
-            f"font-weight: bold; padding: 4px 12px; }}"
-        )
+        self._btn_manual_lose.setStyleSheet(self._btn_style(right_color))
 
     # =========================================================================
     # 表格刷新
@@ -693,13 +947,10 @@ class MainWindow(QMainWindow):
         """刷新统计表格（上方表格）。
 
         数据来源: load_records() → compute_stats() → 逐行填充到 QTableWidget
-        渲染规则: 所有单元格居中、"合计"行粗体、胜/负列上色。
+        渲染规则: 所有单元格居中、"合计"行粗体。
         """
         records = load_records()  # type: ignore[reportUnknownMemberType]
         stats = compute_stats(records)  # type: ignore[reportUnknownMemberType]
-
-        win_color = self._config.get("table", {}).get("win_color", "#4CAF50")
-        lose_color = self._config.get("table", {}).get("lose_color", "#F44336")
 
         self._stats_table.setRowCount(len(stats))
         for row_idx, row_data in enumerate(stats):
@@ -712,11 +963,6 @@ class MainWindow(QMainWindow):
                     font = item.font()
                     font.setBold(True)
                     item.setFont(font)
-
-                if col_name == "胜":
-                    item.setForeground(QColor(win_color))
-                elif col_name == "负":
-                    item.setForeground(QColor(lose_color))
 
                 self._stats_table.setItem(row_idx, col_idx, item)
 
@@ -806,7 +1052,7 @@ class MainWindow(QMainWindow):
         """
         records = load_records()  # type: ignore[reportUnknownMemberType]
         if not records:
-            self._status_bar.showMessage("没有记录可删除")
+            self._show_status("没有记录可删除")
             return
 
         last = records[-1]
@@ -832,7 +1078,7 @@ class MainWindow(QMainWindow):
         records.pop()
         save_records(records)  # type: ignore[reportUnknownMemberType]
         self._reload_tables()
-        self._status_bar.showMessage(f"已删除最后记录: {detail}")
+        self._show_status(f"已删除最后记录: {detail}")
 
     # =========================================================================
     # 关于
@@ -864,7 +1110,7 @@ class MainWindow(QMainWindow):
             lines.append("\t".join(str(row.get(c, "")) for c in STATS_COLUMNS))
 
         QApplication.clipboard().setText("\n".join(lines))
-        self._status_bar.showMessage("已复制统计表格到剪贴板")
+        self._show_status("已复制统计表格到剪贴板")
 
     @staticmethod
     def _open_csv_dir() -> None:
@@ -888,16 +1134,33 @@ class MainWindow(QMainWindow):
         try:
             os.startfile(config_path)
         except OSError:
-            self._status_bar.showMessage(f"无法打开配置文件: {config_path}")
+            self._show_status(f"无法打开配置文件: {config_path}")
 
     def _on_reload_config(self) -> None:
-        """重新加载 config.toml，如果 Worker 正在运行则自动重启。
+        """重新加载 config.toml，包括主题、检测参数等所有配置。
 
-        这样用户修改截图间隔、匹配度阈值等配置后无需手动重启程序。
+        主题切换即时生效（QSS + viewport 背景 + 表格颜色全部重设）。
+        如果 Worker 正在运行则用新配置重启。
         """
+        old_theme_name = self._config.get("appearance", {}).get("theme", "dark")
         self._config = load_config()  # type: ignore[reportUnknownMemberType]
+        new_theme_name = self._config.get("appearance", {}).get("theme", "dark")
         init_active_csv_from_config()  # type: ignore[reportUnknownMemberType]
         self._update_info_label()
+
+        # 主题变化时重新加载主题文件并应用
+        if old_theme_name != new_theme_name:
+            theme = load_theme(new_theme_name)
+            self._colors = theme.colors
+            self._titlebar_cfg = theme.titlebar
+            self._assets_dir = theme.assets_dir
+            self.setStyleSheet(theme.qss)
+            self._apply_table_viewport_palette()
+            self._refresh_stats_table()
+            self._update_manual_buttons()
+            # 更新标题栏外观
+            self._title_bar.set_title("MD Stats")
+            self._title_bar.reload_style(self._titlebar_cfg)
 
         # 如果 Worker 正在运行，停止后用新配置重启
         worker_was_running = self._worker is not None
@@ -906,7 +1169,7 @@ class MainWindow(QMainWindow):
             self._worker.wait(2000)  # type: ignore[reportUnknownMemberType]
             self._start_worker()
 
-        self._status_bar.showMessage(
+        self._show_status(
             "配置已重新载入" + (" 并重启识别" if worker_was_running else "")
         )
 
@@ -946,40 +1209,50 @@ class MainWindow(QMainWindow):
     # 列宽持久化
     # =========================================================================
 
-    # 列宽默认值，首次运行时使用；用户调整后会被 .column_widths.json 覆盖
+    # 列宽默认值（首次运行使用，像素），最后一列由 stretchLastSection 管理
     _DEFAULT_COLUMN_WIDTHS = {
-        "stats":    [70, 40, 25, 25, 50, 75, 75, 70, 70, 60, 60, 50, 50, 70, 70],
-        "record":   [ 0, 78, 65, 64, 62, 50, 47, 39, 466],
+        "stats":    [70, 40, 25, 25, 50, 75, 75, 70, 70, 60, 60, 50, 50, 70],
+        "record":   [ 0, 78, 65, 64, 62, 50, 47, 39],
     }
 
+    def showEvent(self, event) -> None:
+        """窗口首次显示后，恢复列宽并应用背景图片。"""
+        super().showEvent(event)
+        if not getattr(self, "_cols_restored", False):
+            self._cols_restored = True
+            QTimer.singleShot(0, self._restore_column_widths)
+            QTimer.singleShot(100, self._do_apply_pixmaps)
+
     def _restore_column_widths(self) -> None:
-        """从 .column_widths.json 恢复上次列宽，首次运行使用默认值。"""
+        """从 .column_widths.json 恢复列宽（跳过最后一列）。"""
         try:
             with open(_COLUMN_WIDTHS_PATH, "r", encoding="utf-8") as f:
                 saved = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             saved = {}
 
-        for table, widths, default in [
-            (self._stats_table, saved.get("stats", []), self._DEFAULT_COLUMN_WIDTHS["stats"]),
-            (self._record_table, saved.get("record", []), self._DEFAULT_COLUMN_WIDTHS["record"]),
+        for table, key, defaults in [
+            (self._stats_table, "stats", self._DEFAULT_COLUMN_WIDTHS["stats"]),
+            (self._record_table, "record", self._DEFAULT_COLUMN_WIDTHS["record"]),
         ]:
-            w = widths if widths and len(widths) == table.columnCount() else default
-            for col, val in enumerate(w):
-                table.setColumnWidth(col, val)
+            widths = saved.get(key, [])
+            for col in range(table.columnCount() - 1):
+                if widths and col < len(widths):
+                    table.setColumnWidth(col, max(20, widths[col]))
+                elif col < len(defaults):
+                    table.setColumnWidth(col, defaults[col])
 
     def _save_column_widths(self) -> None:
-        """将当前表格列宽写入 .column_widths.json。"""
-        data = {
-            "stats": [
-                self._stats_table.columnWidth(c)
-                for c in range(self._stats_table.columnCount())
-            ],
-            "record": [
-                self._record_table.columnWidth(c)
-                for c in range(self._record_table.columnCount())
-            ],
-        }
+        """保存绝对列宽（跳过最后一列，由 stretchLastSection 管理）。"""
+        data: dict[str, list[int]] = {}
+        for table, key in [
+            (self._stats_table, "stats"),
+            (self._record_table, "record"),
+        ]:
+            data[key] = [
+                table.columnWidth(c)
+                for c in range(table.columnCount() - 1)
+            ]
         with open(_COLUMN_WIDTHS_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
 
