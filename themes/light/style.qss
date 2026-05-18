@@ -1,0 +1,172 @@
+QMainWindow {
+    background-color: {{color.main_bg}};
+}
+QWidget {
+    color: {{color.text_primary}};
+    font-family: {{assets.font_family}};
+    font-size: {{assets.font_size}}px;
+}
+QPushButton {
+    background-color: {{color.widget_bg}};
+    color: {{color.text_primary}};
+    border: 1px solid {{color.border}};
+    border-radius: 6px;
+    padding: 4px 14px;
+}
+QPushButton:hover {
+    background-color: {{color.hover_bg}};
+    border-color: {{color.border_hover}};
+}
+QPushButton:pressed {
+    background-color: {{color.pressed_bg}};
+}
+QPushButton:disabled {
+    background-color: {{color.border_disabled}};
+    color: {{color.text_disabled}};
+    border-color: {{color.border_disabled}};
+}
+QLineEdit {
+    background-color: {{color.widget_bg}};
+    color: {{color.text_primary}};
+    border: 1px solid {{color.border}};
+    border-radius: 4px;
+    padding: 3px 8px;
+}
+QLineEdit:focus {
+    border-color: {{color.border_focus}};
+}
+QLineEdit:disabled {
+    background-color: {{color.border_disabled}};
+    color: {{color.text_disabled}};
+}
+QTableWidget {
+    background-color: {{color.widget_bg}};
+    alternate-background-color: {{color.alt_row_bg}};
+    color: {{color.table_text}};
+    border: 1px solid {{color.border}};
+    gridline-color: {{color.border}};
+    outline: none;
+}
+QTableWidget::item:selected {
+    background-color: {{color.selection_bg}};
+    color: {{color.table_text}};
+}
+QHeaderView {
+    background-color: {{color.statusbar_bg}};
+}
+QHeaderView::section {
+    background-color: {{color.statusbar_bg}};
+    color: {{color.text_primary}};
+    border: none;
+    border-bottom: 2px solid {{color.header_accent}};
+    padding: 5px 8px;
+    font-weight: bold;
+    font-size: 12px;
+}
+QHeaderView::section:vertical {
+    background-color: {{color.statusbar_bg}};
+    color: {{color.text_secondary}};
+    border: none;
+    border-right: 1px solid {{color.border}};
+    padding: 0px 4px;
+    font-size: 11px;
+}
+QTableCornerButton::section {
+    background-color: {{color.statusbar_bg}};
+    border: none;
+    border-bottom: 2px solid {{color.header_accent}};
+    border-right: 1px solid {{color.border}};
+}
+QScrollBar:vertical {
+    background: transparent;
+    width: 8px;
+    margin: 0;
+}
+QScrollBar::handle:vertical {
+    background: {{color.text_secondary}};
+    border-radius: 4px;
+    min-height: 30px;
+}
+QScrollBar::handle:vertical:hover {
+    background: {{color.muted_bg}};
+}
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0;
+}
+QScrollBar:horizontal {
+    background: transparent;
+    height: 8px;
+}
+QScrollBar::handle:horizontal {
+    background: {{color.text_secondary}};
+    border-radius: 4px;
+    min-width: 30px;
+}
+QScrollBar::handle:horizontal:hover {
+    background: {{color.muted_bg}};
+}
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0;
+}
+QSplitter::handle {
+    background-color: {{color.splitter}};
+}
+QSplitter::handle:hover {
+    background-color: {{color.splitter_hover}};
+}
+QSplitter::handle:vertical {
+    height: 3px;
+}
+QLabel {
+    background: transparent;
+    border: none;
+}
+QComboBox {
+    background-color: {{color.combo_bg}};
+    color: {{color.text_primary}};
+    border: 1px solid {{color.combo_border}};
+    border-radius: 4px;
+    padding: 3px 8px;
+}
+QComboBox:hover {
+    border-color: {{color.border_hover}};
+}
+QComboBox QAbstractItemView {
+    background-color: {{color.combo_bg}};
+    color: {{color.text_primary}};
+    border: 1px solid {{color.combo_border}};
+    selection-background-color: {{color.selection_bg}};
+    outline: none;
+}
+QMessageBox {
+    background-color: {{color.msgbox_bg}};
+}
+QMessageBox QLabel {
+    color: {{color.text_primary}};
+}
+#contentWidget {
+    border-radius: 8px;
+}
+#titleBar {
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+}
+#titleMinBtn, #titleCloseBtn {
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+}
+#customStatusBar {
+    background-color: {{color.statusbar_bg}};
+    border: none;
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+}
+#statusMessage {
+    color: {{color.text_secondary}};
+    background: transparent;
+    border: none;
+    font-size: 12px;
+}

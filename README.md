@@ -92,7 +92,7 @@ python main.py
 | `detection.interval` | 截图间隔（秒） | `0.3` |
 | `detection.confidence_threshold` | 匹配置信度阈值 | `0.8` |
 | `window.width` / `height` | 主窗口尺寸 | `895` / `500` |
-| `table.win_color` / `lose_color` | 胜/负列颜色 | `#4CAF50` / `#F44336` |
+| `appearance.theme` | 界面主题 `"dark"` / `"light"` | `"dark"` |
 | `opponent_decks.presets` | 对方卡组预设列表 | `["炎兽", "闪刀姬", ...]` |
 | `recorder.daily_files` | 是否按日期分文件 | `true` |
 
