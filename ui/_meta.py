@@ -4,7 +4,7 @@ VERSION = "1.2.0"
 AUTHOR = "learbox"
 LICENSE = "MIT"
 REPO_URL = "https://github.com/learbox/mdstats_py"  # 项目仓库，留空则隐藏
-DESCRIPTION = "基于 OpenCV + PySide6\nMaster Duel 对局自动统计工具"
+DESCRIPTION = "基于 Python + OpenCV + PySide6\nMaster Duel 对局自动统计工具"
 # 特别鸣谢（支持 HTML 链接，留空则不显示）
 # 注意：如果 HTML 里含双引号，外层用单引号包裹，反之亦然
 # 多行写法：每行一个字符串，用括号括起来自动拼接
