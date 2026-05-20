@@ -61,21 +61,22 @@ table_font_size = 13
 # ---- 背景图片（全部可选，file = "" 时用纯色填充） ----
 # 格式: key = { file = "文件名.png", mode = "stretch|tile|center" }
 #   stretch = 拉伸填充控件    tile = 小图循环平铺    center = 居中不缩放
+# stretch 模式会自动拉伸，图片尺寸无需精确，但宽高比参考以下建议
 #
-# 主窗口全幅背景（#contentWidget）
+# 主窗口全幅背景（#contentWidget）                建议: 1560×1000
 main_bg      = { file = "", mode = "stretch" }
-# 顶部控制栏 + 底部按钮面板（QFrame#topPanel / #bottomPanel）
+# 顶部控制栏 + 底部按钮面板（QFrame#topPanel / #bottomPanel）  建议: 1760×260
 panel_bg     = { file = "", mode = "stretch" }
-# 统计数据表格 + 对战记录表格（QTableWidget）
+# 统计数据表格 + 对战记录表格（QTableWidget）              建议: 1860×810
 table_bg     = { file = "", mode = "stretch" }
-# 表格列标题栏（QHeaderView）
+# 表格列标题栏（QHeaderView）                      建议: 1920×220
 header_bg       = { file = "", mode = "stretch" }
-row_header_bg   = { file = "", mode = "stretch" }
-# 表格左上角交叉按钮（QTableCornerButton::section）
+row_header_bg   = { file = "", mode = "stretch" }   # 建议: 340×3000
+# 表格左上角交叉按钮（QTableCornerButton::section）    建议: 1024×1024
 corner_bg       = { file = "", mode = "stretch" }
-# 按钮表面纹理（QPushButton），建议 32×32 小图 tile 平铺
+# 按钮表面纹理（QPushButton），小图 tile 平铺            建议: 64×64
 button_bg    = { file = "", mode = "tile" }
-# 底部状态栏（#customStatusBar）
+# 底部状态栏（#customStatusBar）                    建议: 2050×160
 statusbar_bg = { file = "", mode = "stretch" }
 
 

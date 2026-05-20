@@ -154,7 +154,7 @@ mdstats_py/
 ## 致谢
 
 - 设计思路参考了 [ULeang/mdstats](https://github.com/ULeang/mdstats)（GPL-3.0，C++）— 代码完全独立编写
-- 马卡龙主题感谢 [KleeKlee](https://github.com/slimpigs) 提供代码修改支持
+- 马卡龙主题感谢 [KleeKlee](https://github.com/slimpigs) 提供代码修改支持和无偿提供的美术资源
 - 感谢 [ULya_tooru](https://github.com/ULeang) 提供原版思路
 ## 工具与资源
 
