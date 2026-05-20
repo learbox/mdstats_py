@@ -545,6 +545,7 @@ class MainWindow(QMainWindow):
             self._config.get("window", {}).get("width", 1100),
             self._config.get("window", {}).get("height", 700),
         )
+        self._restore_main_window_pos()
 
         # ---- 静态按钮调色板（macaron 主题用，给每个按钮分配不同的语义色） ----
         self._apply_static_button_palette()
@@ -1400,7 +1401,8 @@ class MainWindow(QMainWindow):
     # =========================================================================
 
     def closeEvent(self, event: Any) -> None:
-        """窗口关闭时保存列宽、安全停止后台工作线程和所有定时器。"""
+        """窗口关闭时保存状态、安全停止后台工作线程和所有定时器。"""
+        self._save_main_window_pos()
         self._save_float_window_pos()
         self._save_column_widths()
         if self._info_timer is not None:
@@ -1413,3 +1415,26 @@ class MainWindow(QMainWindow):
             self._worker.stop()   # type: ignore[reportUnknownMemberType]
             self._worker.wait(3000)  # type: ignore[reportUnknownMemberType]
         event.accept()
+
+    def _restore_main_window_pos(self) -> None:
+        """从 .app_state.json 恢复主窗口位置。"""
+        try:
+            with open(_APP_STATE_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            pos = data.get("main_pos")
+            if pos and len(pos) == 2 and pos[0] >= -100 and pos[1] >= -100:
+                self.move(pos[0], pos[1])
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+
+    def _save_main_window_pos(self) -> None:
+        try:
+            with open(_APP_STATE_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            data = {}
+        p = self.pos()
+        data["main_pos"] = [p.x(), p.y()]
+        with open(_APP_STATE_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
