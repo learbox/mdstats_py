@@ -80,7 +80,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
     QFrame,
-    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -452,9 +451,6 @@ class MainWindow(QMainWindow):
     def _apply_table_viewport_palette(self) -> None:
         self._tm.apply_table_viewport_palette(self._theme_widgets)
 
-    def _wrap_layouts_in_frames(self) -> None:
-        self._tm.wrap_layouts(self._theme_widgets)
-
     def __init__(self) -> None:
         """初始化主窗口：加载 .ui 界面文件、配置样式、连接信号、加载数据。"""
         super().__init__()
@@ -574,13 +570,8 @@ class MainWindow(QMainWindow):
         self._btn_edit_config.clicked.connect(self._on_edit_config)
         self._btn_reload_config.clicked.connect(self._on_reload_config)
 
-        # ---- 悬浮窗按钮（程序创建，不在 .ui 中）----
-        self._btn_float = QPushButton("悬浮窗")
-        bottom_layout = content.findChild(QHBoxLayout, "bottomLayout")
-        if bottom_layout is not None:
-            # 关于按钮是倒数第 2 个，插入到它左边
-            idx = bottom_layout.indexOf(self._btn_about)
-            bottom_layout.insertWidget(idx, self._btn_float)
+        # ---- 悬浮窗按钮 ----
+        self._btn_float = _require_widget(content.findChild(QPushButton, "btn_float"), "btn_float")
         self._btn_float.clicked.connect(self._on_toggle_float)
         self._float_window: Any = None
 
@@ -630,20 +621,9 @@ class MainWindow(QMainWindow):
         self._splitter.setStretchFactor(1, 3)
 
         # ---- 自定义状态栏（包在 content 内，共享阴影容器） ----
-        self._status_frame = QFrame()
-        self._status_frame.setObjectName("customStatusBar")
-        sf_layout = QHBoxLayout(self._status_frame)
-        sf_layout.setContentsMargins(12, 3, 12, 3)
-        sf_layout.setSpacing(10)
-
-        self._status_label = QLabel("就绪 — 请点击《启动》开始")
-        self._status_label.setObjectName("statusMessage")
-        sf_layout.addWidget(self._status_label, 1)
-
-        self._info_label = QLabel()
-        sf_layout.addWidget(self._info_label)
-
-        root_layout.addWidget(self._status_frame)  # type: ignore[union-attr]
+        self._status_frame = _require_widget(content.findChild(QFrame, "customStatusBar"), "customStatusBar")
+        self._status_label = _require_widget(content.findChild(QLabel, "statusMessage"), "statusMessage")
+        self._info_label = _require_widget(content.findChild(QLabel, "infoLabel"), "infoLabel")
 
         # ---- 右下角信息标签定时刷新 ----
         info_timer = QTimer(self)
@@ -676,7 +656,6 @@ class MainWindow(QMainWindow):
         )
 
         # ---- 控件调色板（需要在 _theme_widgets 构建后调用） ----
-        self._wrap_layouts_in_frames()
         self._apply_table_viewport_palette()
         self._apply_static_button_palette()
 
