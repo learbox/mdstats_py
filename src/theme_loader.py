@@ -1,49 +1,92 @@
-"""主题加载模块 — 从 themes/ 文件夹加载 QSS、颜色表、标题栏配置及资源。
+"""主题加载模块 — 从 themes/ 文件夹加载 QSS、颜色表、标题栏配置及图片资源。
 
 ================================================================================
-加载优先级
+加载优先级（三级回退）
+================================================================================
 
-    1. themes/{name}/   → 用户指定的主题（文件夹存在则直接用）
-    2. 内置硬编码 fallback → 主题文件夹不存在时兜底（亮色，零外部依赖）
+程序启动或切换主题时，调用 load_theme(theme_name) 加载主题。
+按以下顺序尝试，任意一步成功即返回：
+
+    第1级: themes/{name}/theme.toml + style.qss
+           ↓ 主题文件夹存在 → 读取 TOML 和 QSS 文件，替换占位符
+    第2级: 内置硬编码亮色主题（_BUILTIN_COLORS + _BUILTIN_QSS）
+           ↓ 主题文件夹不存在 → 返回零依赖的亮色主题（即使 themes/ 被删除也能运行）
+
+在第1级内部还有子回退：
+    第1a: theme.toml 中某个 section 缺失 → 用 _BUILTIN_xxx 兜底
+    第1b: 某个 color key 未定义 → 逐个从 _BUILTIN_COLORS 补
+    第1c: style.qss 不存在 → 用 _BUILTIN_QSS 兜底
 
 ================================================================================
-theme.toml 结构
+两种 QSS 占位符系统
+================================================================================
+
+项目中存在两套不同的 QSS 模板，使用不同的占位符格式：
+
+    主题文件 QSS（themes/*/style.qss）: 使用 {{color.key}} 和 {{asset.key}}
+        示例: background-color: {{color.main_bg}};
+              border-image: url({{asset.main_bg}}) 0 0 0 0 stretch stretch;
+        处理方式: Python 的 str.replace() 逐个替换
+
+    内置兜底 QSS（_BUILTIN_QSS）: 使用 %(key)s
+        示例: background-color: %(main_bg)s;
+        处理方式: Python 的 % 字符串格式化
+
+为什么有两套？
+    主题 QSS 用 {{key}} 是为了让用户打开 style.qss 时能直观看到占位符含义。
+    内置 QSS 用 %(key)s 是因为它嵌在 Python 字符串中，多层花括号会导致转义混乱。
+
+================================================================================
+theme.toml 完整结构（以 macaron 主题为例）
+================================================================================
 
     [meta]
-    name = "暗色沉浸"
+    name = "马卡龙"                    # 主题显示名称（仅用于 UI 展示）
 
     [titlebar]
-    height = 36
-    icon_size = 20
-    text_color = "#b8b8c8"
-    text_size = 12
-    btn_hover_bg = "#2a2a4a"
-    btn_close_hover = "#e74c3c"
+    height = 40                        # 标题栏总高度（像素）
+    icon_size = 22                     # 图标显示尺寸（像素）
+    text_color = "#9b6b8e"             # 标题文字颜色
+    text_size = 16                     # 标题文字字号（像素）
+    text_font = '"Marker Felt", ...'   # 标题字体栈（可选，空=用全局字体）
+    text_shadow = "#fce4ec"            # 标题文字阴影颜色（可选，空=不启用）
+    btn_hover_bg = "#fce4ec"           # 最小化按钮悬停背景色
+    btn_close_hover = "#f0a5b5"        # 关闭按钮悬停背景色（红色系）
 
     [assets]
-    font_family = "Microsoft YaHei"
-    font_size   = 13
+    font_family = "Microsoft YaHei"    # 全局字体族名
+    font_size = 14                     # 全局字号（像素）
+    header_font_size = 14              # 列标题字号（像素）
+    row_header_font_size = 14          # 行号列字号（像素）
+    table_font_size = 14               # 表格内文字字号（像素）
 
-    [[assets.fonts]]
-    file = "NotoSansSC-Regular.ttf"
-    family = "Noto Sans SC"
+    [[assets.fonts]]                   # 自定义 TTF 字体（可多项，可选）
+    file = "MyCustomFont.ttf"          #   assets/ 下的字体文件名
+    family = "My Custom Font"          #   加载后的字体族名（填入 font_family 回退栈）
 
-    [assets.images]
-    main_bg      = { file = "bg.png", mode = "stretch" }
-    ...
+    [assets.images]                    # 背景图片（全部可选，file="" 时用纯色）
+    main_bg      = { file = "main_bg.png", mode = "stretch" }
+    panel_bg     = { file = "panel_bg.png", mode = "stretch" }
+    table_bg     = { file = "table_bg.png", mode = "stretch" }
+    header_bg    = { file = "header_bg.png", mode = "stretch" }
+    row_header_bg= { file = "row_header_bg.png", mode = "stretch" }
+    corner_bg    = { file = "corner_bg.png", mode = "stretch" }
+    button_bg    = { file = "button_texture.png", mode = "tile" }
+    statusbar_bg = { file = "statusbar_bg.png", mode = "stretch" }
 
-    [colors]
-    main_bg = "#1a1a2e"
-    ...
+    [colors]                           # 颜色表（所有值都是 #RRGGBB 格式）
+    # ... 约 50 个颜色 key，详见 themes/dark/theme.toml 注释
 
 ================================================================================
 使用方式
 
     from src.theme_loader import load_theme
 
-    theme = load_theme("dark")
-    window.setStyleSheet(theme.qss)
-    titlebar = TitleBar("MD Stats", theme.titlebar, theme.assets_dir)
+    theme = load_theme("dark")           # 加载暗色主题
+    window.setStyleSheet(theme.qss)      # 应用 QSS 到窗口
+    titlebar = TitleBar("MD Stats",
+                        theme.titlebar,   # 标题栏配置
+                        theme.assets_dir) # 资源目录路径
 """
 
 from __future__ import annotations
@@ -56,55 +99,76 @@ from typing import Any
 
 from src.config import get_project_root
 
+# ---- TOML 解析：Python 3.11+ 内置，3.10 降级到 tomli ----
 if sys.version_info >= (3, 11):
     import tomllib
 else:
     import tomli as tomllib  # type: ignore[import-not-found]
 
-# 字体加载
+# 字体加载（Qt 提供的跨平台字体管理 API）
 from PySide6.QtGui import QFontDatabase
 
-# themes/ 文件夹路径（开发/打包兼容）
+# themes/ 文件夹路径（开发模式: 项目根/themes，打包模式: EXE所在目录/themes）
 _THEMES_DIR = get_project_root() / "themes"
 
+# 全局默认字体（当主题未指定字体时的兜底）
 _DEFAULT_FONT = "Microsoft YaHei"
 
 
+# =============================================================================
+# Theme — 数据类，存储加载完成的主题数据
+# =============================================================================
+
 @dataclass
 class Theme:
-    """加载完成的主题数据包。"""
-    qss: str                                    # 替换占位符后的 QSS 字符串
-    colors: dict[str, str]                       # [colors] 颜色字典
-    titlebar: dict[str, Any]                     # [titlebar] 配置
-    assets_dir: Path                             # 主题 assets/ 目录的绝对路径
-    pixmaps: dict[str, Any] = field(default_factory=dict)  # {selector: QPixmap}
+    """加载完成的主题数据包。
+
+    字段说明:
+        qss        — 完整的 QSS 样式表字符串（占位符已被替换为实际值）
+                     可以直接传给 widget.setStyleSheet() 使用
+        colors     — 颜色字典 {key: "#RRGGBB"}，同时包含字体相关的 key
+                     （font_family, font_size 等是为了兼容内置 QSS 的 % 格式化）
+        titlebar   — 标题栏配置字典，传给 TitleBar 控件
+        assets_dir — 主题 assets/ 目录的绝对路径（Path 对象）
+        pixmaps    — 图片路径映射 {QSS选择器: 文件路径}，
+                     用于 main_window 用 QPalette 贴背景图
+    """
+    qss: str
+    colors: dict[str, str]
+    titlebar: dict[str, Any]
+    assets_dir: Path
+    pixmaps: dict[str, Any] = field(default_factory=dict)
 
 
 # =============================================================================
-# 最终兜底：硬编码亮色主题
+# 最终兜底：硬编码亮色主题（零外部依赖）
+#
+# 这些常量的作用是：即使整个 themes/ 文件夹被删除或损坏，
+# 程序仍然能启动并显示一个可用的亮色界面，不会崩溃或白屏。
+# 颜色值与 themes/light/theme.toml 保持一致。
 # =============================================================================
 
 _BUILTIN_COLORS: dict[str, str] = {
-    # 背景层次
+    # ---- 背景层次 ----
     "main_bg": "#f5f6fa", "widget_bg": "#ffffff", "alt_row_bg": "#f5f7fa",
     "statusbar_bg": "#ecf0f1",
-    # 文字
+    # ---- 文字颜色 ----
     "text_primary": "#2c3e50", "text_secondary": "#7f8c8d",
     "text_disabled": "#bdc3c7", "table_text": "#2c3e50",
-    # 边框
+    # ---- 边框颜色 ----
     "border": "#dcdde1", "border_hover": "#3498db", "border_focus": "#3498db",
     "border_disabled": "#ecf0f1",
-    # 交互
+    # ---- 交互状态 ----
     "hover_bg": "#e8f0fe", "pressed_bg": "#d5e4f7",
     "selection_bg": "#d5e4f7",
-    # 语义色
+    # ---- 语义色（手动按钮） ----
     "win": "#27ae60", "lose": "#c0392b", "coin": "#e67e22", "turn": "#2980b9",
     "start_bg": "#27ae60", "warning_bg": "#e67e22", "muted_bg": "#95a5a6",
-    # 分割器
+    # ---- 分割器与装饰 ----
     "splitter": "#dcdde1", "splitter_hover": "#3498db", "header_accent": "#3498db",
-    # 下拉框
+    # ---- 下拉框与弹窗 ----
     "combo_bg": "#ffffff", "combo_border": "#dcdde1", "msgbox_bg": "#f5f6fa",
-    # —— 细粒度控件配色（用于统一 QSS 模板） ——
+    # ---- 细粒度控件配色 ----
     "button_bg": "#ffffff", "button_border": "#dcdde1",
     "button_hover_bg": "#e8f0fe", "button_pressed_bg": "#d5e4f7",
     "button_disabled_bg": "#ecf0f1",
@@ -133,6 +197,8 @@ _BUILTIN_ASSETS: dict[str, Any] = {
     "fonts": [], "images": {},
 }
 
+# 内置 QSS 模板 — 使用 %(key)s 占位符格式
+# 内容与 themes/light/style.qss 保持一致，只是占位符格式不同
 _BUILTIN_QSS = """\
 QMainWindow { background-color: %(main_bg)s; }
 QWidget { color: %(text_primary)s; font-family: "%(font_family)s"; font-size: %(font_size)spx; }
@@ -201,7 +267,21 @@ QMessageBox QLabel { color: %(text_primary)s; }
 # =============================================================================
 
 def load_theme(name: str) -> Theme:
-    """加载指定主题，按优先级回退。"""
+    """加载指定主题，按优先级回退。
+
+    这是模块唯一的公开入口。调用方只需要传主题名，不需要关心内部回退逻辑。
+
+    参数:
+        name — 主题文件夹名（如 "dark"、"macaron"），也支持子路径
+
+    返回:
+        Theme 对象，包含 QSS、颜色、标题栏配置等
+
+    回退链:
+        name 为空 → 当作 "light"
+        themes/{name}/ 存在 → _build_theme() 从文件夹构建
+        themes/{name}/ 不存在 → _fallback_theme() 返回硬编码亮色主题
+    """
     if not name:
         name = "light"
 
@@ -217,10 +297,33 @@ def load_theme(name: str) -> Theme:
 # =============================================================================
 
 def _build_theme(theme_dir: Path) -> Theme:
-    """从指定主题文件夹构建 Theme 对象。"""
+    """从指定主题文件夹构建 Theme 对象。
+
+    这是主题加载的核心逻辑，分6个步骤：
+
+        步骤1: 加载 theme.toml → 解析 [colors]、[titlebar]、[assets]
+        步骤2: 加载 TTF 字体文件（如果有）
+        步骤3: 加载 style.qss 文件
+        步骤4: 替换 QSS 中的占位符 {{color.xxx}}、{{assets.xxx}}、{{asset.xxx}}
+        步骤5: 收集图片文件路径（用于 QPalette 贴背景图）
+        步骤6: 兜底清理（未替换的占位符用内置值补、% 格式化）
+
+    参数:
+        theme_dir — 主题文件夹的 Path 对象（如 Path("themes/dark")）
+    """
     assets_dir = theme_dir / "assets"
 
-    # --- 加载 theme.toml ---
+    # =====================================================================
+    # 步骤1: 加载 theme.toml
+    #
+    # TOML 文件中的三个顶层 section 分别解析:
+    #   [colors]   → 颜色字典
+    #   [titlebar] → 标题栏外观配置
+    #   [assets]   → 字体、字号、图片配置
+    #
+    # 如果某个 section 缺失或为空，用内置兜底值代替。
+    # 注意 TOML 必须以二进制模式 ("rb") 打开。
+    # =====================================================================
     toml_path = theme_dir / "theme.toml"
     data: dict[str, Any] = {}
     if toml_path.exists():
@@ -243,27 +346,53 @@ def _build_theme(theme_dir: Path) -> Theme:
         else dict(_BUILTIN_ASSETS)
     )
 
-    # --- 加载字体 ---
+    # =====================================================================
+    # 步骤2: 加载 TTF 字体
+    #
+    # theme.toml 中 [[assets.fonts]] 是一个数组，每项包含 file 和 family。
+    # QFontDatabase.addApplicationFont() 把 TTF 注册到 Qt 的字体系统，
+    # 之后 QSS 中通过 font-family 引用即可使用，无需安装到系统。
+    # =====================================================================
     _load_fonts(assets_cfg.get("fonts", []), assets_dir)
 
     font_family = assets_cfg.get("font_family", _DEFAULT_FONT)
     font_size = assets_cfg.get("font_size", 13)
 
-    # --- 加载 QSS ---
+    # =====================================================================
+    # 步骤3: 加载 style.qss 文件
+    #
+    # 优先从主题目录读取，不存在时用内置 QSS 兜底。
+    # 内置 QSS 使用 %(key)s 占位符，和主题 QSS 的 {{color.key}} 不同，
+    # 所以后续分支会分开处理。
+    # =====================================================================
     qss_path = theme_dir / "style.qss"
     if qss_path.exists():
         qss = qss_path.read_text(encoding="utf-8")
     else:
         qss = _BUILTIN_QSS
 
-    # 替换 {{color.xxx}} 占位符
+    # =====================================================================
+    # 步骤4: 替换 QSS 中的占位符
+    #
+    # 有三类占位符需要替换:
+    #
+    #   {{color.xxx}}       → 颜色值（如 #1a1a2e）
+    #     遍历 colors 字典，用 str.replace() 逐个替换
+    #
+    #   {{assets.font_xxx}} → 字体相关值（font_family、font_size 等）
+    #     font_family 特殊处理: 如果值含逗号或引号则视为已格式化的
+    #     字体回退栈（如 '"Yuppy SC", "Comic Sans MS"'），原样使用；
+    #     否则自动加引号（如 Microsoft YaHei → "Microsoft YaHei"）
+    #
+    #   {{asset.xxx}}       → 图片文件路径（绝对路径，正斜杠）
+    #     由 _substitute_asset_paths() 处理，替换为本地文件路径
+    # =====================================================================
+
+    # 4a: {{color.xxx}} — 颜色值
     for key, val in colors.items():
         qss = qss.replace("{{color." + key + "}}", val)
 
-    # 替换 {{assets.xxx}} 占位符
-    # font_family 既支持单个字体名（"Microsoft YaHei"，自动补引号），
-    # 也支持完整的字体回退栈（'"Yuppy SC", "Comic Sans MS"'，按原样使用）。
-    # 检测：如果已经含逗号或引号则视为已格式化好的 QSS 字体栈，避免双重加引号。
+    # 4b: {{assets.font_xxx}} — 字体相关，注意 font_family 的引号处理
     ff_value = font_family if ("," in font_family or '"' in font_family) else f'"{font_family}"'
     qss = qss.replace("{{assets.font_family}}", ff_value)
     qss = qss.replace("{{assets.font_size}}", str(font_size))
@@ -274,29 +403,45 @@ def _build_theme(theme_dir: Path) -> Theme:
     qss = qss.replace("{{assets.table_font_size}}",
                       str(assets_cfg.get("table_font_size", 13)))
 
-    # 替换 {{asset.<image_key>}} 占位符 → 资源文件的绝对路径（POSIX，正斜杠）
-    # QSS 中可以用 border-image: url({{asset.main_bg}}) ... 引用主题图片
+    # 4c: {{asset.xxx}} — 图片路径（替换为绝对路径，确保 Qt 能找到文件）
     qss = _substitute_asset_paths(qss, assets_cfg.get("images", {}), assets_dir)
 
-    # 清理残留的 {{asset.xxx}} 占位符（无图片资源的主题不会替换），
-    # 用 none 替代使得 QSS 中 url(none) 能被 Qt 安全忽略
+    # 4d: 清理残留的 {{asset.xxx}} 占位符
+    #     无图片资源的主题（如 dark/light 的 file=""）不会触发替换，
+    #     用 "none" 代替使 QSS 中的 url(none) 能被 Qt 安全忽略。
     qss = re.sub(r"\{\{asset\.\w+}}", "none", qss)
 
-    # 收集图片（不注入 QSS，由 main_window 用 QPalette 加载）
+    # =====================================================================
+    # 步骤5: 收集图片文件路径
+    #
+    # 找出实际存在的图片文件，映射到 QSS 选择器。
+    # 这些路径不注入 QSS（QSS 中只用了 border-image），
+    # 而是传给 main_window 用 QPalette.setBrush() 设置背景纹理。
+    # =====================================================================
     pixmaps = _collect_image_paths(assets_cfg.get("images", {}), theme_dir)
 
-    # 确保剩余的 {{color.xxx}} 占位符回退（如果 QSS 中有但主题没定义的）
+    # =====================================================================
+    # 步骤6: 兜底清理
+    #
+    # 6a: 用内置值补上主题未定义的 color key
+    #     例如主题 QSS 中用了 {{color.scrollbar_handle}}，
+    #     但 theme.toml 中没定义 scrollbar_handle → 从 _BUILTIN_COLORS 补
+    #
+    # 6b: 如果 style.qss 不存在（用了内置 QSS 兜底），
+    #     内置 QSS 使用 %(key)s 占位符，需要用 % 格式化替换
+    # =====================================================================
+
+    # 6a: 逐个补未定义的 color key
     for key, val in _BUILTIN_COLORS.items():
         qss = qss.replace("{{color." + key + "}}", val)
 
-    # 构建最终 QSS（附加颜色字典中没有但在内置 QSS 中需要的值）
-    full_qss = qss
-    # 把 font_family/font_size 注入到 QSS 的 %() 格式化（仅用于内置兜底 QSS）
+    # 准备颜色+字体的合并字典（用于内置 QSS 的 % 格式化）
     colors_with_font: dict[str, Any] = dict(colors)
     colors_with_font["font_family"] = font_family
     colors_with_font["font_size"] = str(font_size)
 
-    # 如果 QSS 文件加载失败兜底用了 _BUILTIN_QSS，需要 % 格式化
+    full_qss = qss
+    # 6b: 内置 QSS 需要 % 格式化
     if not (theme_dir / "style.qss").exists():
         full_qss = qss % colors_with_font
 
@@ -310,7 +455,13 @@ def _build_theme(theme_dir: Path) -> Theme:
 
 
 def _fallback_theme() -> Theme:
-    """最终兜底：返回内置硬编码亮色主题。"""
+    """最终兜底：返回硬编码亮色主题（零文件依赖）。
+
+    当 themes/ 文件夹不存在，或用户指定的主题文件夹不存在时调用。
+    返回的 Theme 对象完全基于 _BUILTIN_xxx 常量构建，不需要读取任何文件。
+
+    内置 QSS 使用 %(key)s 占位符，直接用 colors 字典做 % 格式化。
+    """
     colors: dict[str, Any] = dict(_BUILTIN_COLORS)
     colors["font_family"] = _DEFAULT_FONT
     colors["font_size"] = "13"
@@ -322,13 +473,22 @@ def _fallback_theme() -> Theme:
         qss=qss,
         colors=colors,
         titlebar=dict(_BUILTIN_TITLEBAR),
-        assets_dir=_THEMES_DIR / "builtin_light" / "assets",
+        assets_dir=_THEMES_DIR / "builtin_light" / "assets",  # 不存在也无妨
         pixmaps={},
     )
 
 
 def _load_fonts(fonts: list[dict], assets_dir: Path) -> None:
-    """从 assets/ 加载 TTF 字体文件。"""
+    """从主题的 assets/ 目录加载 TTF/OTF 字体文件。
+
+    Qt 的 QFontDatabase.addApplicationFont() 注册字体后，
+    该字体在当前程序的生命周期内可用，QSS 中通过 font-family 引用即可。
+    字体不需要安装到操作系统。
+
+    参数:
+        fonts      — [[assets.fonts]] 数组，每项 {"file": "xxx.ttf", "family": "XXX"}
+        assets_dir — 主题的 assets/ 目录路径
+    """
     for entry in fonts:
         file = entry.get("file", "")
         if not file:
@@ -338,21 +498,41 @@ def _load_fonts(fonts: list[dict], assets_dir: Path) -> None:
             QFontDatabase.addApplicationFont(str(path))
 
 
-# 图片配置 → QSS 选择器映射
+# =============================================================================
+# 图片相关工具
+# =============================================================================
+
+# 图片 key → QSS 选择器 映射表
+# theme.toml 中的 main_bg、table_bg 等 key 对应 QSS 中的具体选择器
 _IMAGE_SELECTORS: dict[str, str] = {
-    "main_bg":        "#contentWidget",
-    "table_bg":       "QTableWidget",
-    "header_bg":      "QHeaderView::section",
-    "row_header_bg":  "QHeaderView::section:vertical",
-    "corner_bg":      "QTableCornerButton::section",
-    "button_bg":      "QPushButton",
-    "statusbar_bg":   "#customStatusBar",
+    "main_bg":        "#contentWidget",            # 主窗口全幅背景
+    "table_bg":       "QTableWidget",              # 表格背景
+    "header_bg":      "QHeaderView::section",      # 列标题栏背景
+    "row_header_bg":  "QHeaderView::section:vertical",  # 行号栏背景
+    "corner_bg":      "QTableCornerButton::section",    # 左上角交叉按钮
+    "button_bg":      "QPushButton",               # 按钮纹理
+    "statusbar_bg":   "#customStatusBar",          # 底部状态栏
 }
 
-def _substitute_asset_paths(qss: str, images: dict, assets_dir: Path) -> str:
-    """将 {{asset.<key>}} 替换为 assets/<file> 的绝对 POSIX 路径。
 
-    QSS 的 url(...) 在所有平台都需要正斜杠（Windows 的反斜杠会失败）。
+def _substitute_asset_paths(qss: str, images: dict, assets_dir: Path) -> str:
+    """将 QSS 中的 {{asset.<key>}} 替换为图片文件的绝对路径。
+
+    为什么需要绝对路径？
+        程序运行时的工作目录可能不是项目根目录，
+        如果 QSS 中写相对路径 url(table_bg.png)，Qt 会从工作目录找，找不到。
+
+    为什么用 as_posix() 而不是直接用 Path 的字符串？
+        Windows 文件路径用反斜杠（C:\a\b.png），但 QSS 的 url(...)
+        在所有平台上都需要正斜杠（C:/a/b.png），否则 Qt 解析失败。
+
+    参数:
+        qss        — 待处理的 QSS 字符串
+        images     — [assets.images] 字典，如 {"main_bg": {"file": "bg.png", "mode": "stretch"}}
+        assets_dir — assets/ 目录路径
+
+    返回:
+        替换后的 QSS 字符串
     """
     for key, cfg in images.items():
         if not isinstance(cfg, dict):
@@ -361,14 +541,30 @@ def _substitute_asset_paths(qss: str, images: dict, assets_dir: Path) -> str:
         if not file:
             continue
         file_path = assets_dir / file
-        # as_posix() 给出正斜杠路径，兼容 Qt 的 url(...) 解析
-        url = file_path.resolve().as_posix()
+        url = file_path.resolve().as_posix()      # 转为正斜杠的绝对路径
         qss = qss.replace("{{asset." + key + "}}", url)
     return qss
 
 
 def _collect_image_paths(images: dict, theme_dir: Path) -> dict[str, str]:
-    """收集存在的图片文件路径，返回 {selector: file_path}。"""
+    """收集实际存在的图片文件路径，返回 {QSS选择器: 文件路径}。
+
+    遍历 [assets.images] 中所有配置项，检查对应的文件是否存在。
+    只收集实际存在的文件，不存在的不加入结果。
+
+    这些路径后续由 main_window 用 QPalette.setBrush() 设置为控件背景。
+    为什么不用 QSS 的 border-image？
+        因为 QPalette 的方式可以"纯色打底 + 图片叠加"，而 QSS 的 border-image
+        会直接替换背景，纯色打底就没了。两者结合使用可以达到"半透明纹理叠加
+        纯色背景"的效果。
+
+    参数:
+        images    — [assets.images] 字典
+        theme_dir — 主题文件夹路径（用于定位 assets/）
+
+    返回:
+        {selector: file_path}，如 {"#contentWidget": "C:/.../main_bg.png"}
+    """
     assets_dir = theme_dir / "assets"
     result: dict[str, str] = {}
     for key, cfg in images.items():
@@ -380,7 +576,7 @@ def _collect_image_paths(images: dict, theme_dir: Path) -> dict[str, str]:
         file_path = assets_dir / file
         if not file_path.exists():
             continue
-        selector = _IMAGE_SELECTORS.get(key)
+        selector = _IMAGE_SELECTORS.get(key)   # 把 key 转为 QSS 选择器
         if selector:
             result[selector] = str(file_path)
     return result

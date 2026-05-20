@@ -5,21 +5,33 @@
 ================================================================================
 
     [detection]
-    interval = 0.5              # 截图间隔（秒）
-    confidence_threshold = 0.8  # 模板匹配置信度阈值
+    interval = 0.3              # 截图间隔（秒），推荐 0.3 ~ 1.0
+    confidence_threshold = 0.8  # 模板匹配置信度阈值 (0.0~1.0)，推荐 0.75~0.90
 
     [window]
-    width = 1100                # 主窗口宽度（像素）
+    width = 1300                # 主窗口宽度（像素）
     height = 700                # 主窗口高度（像素）
 
     [appearance]
-    theme = "dark"              # 界面主题: "dark" = 暗色沉浸, "light" = 亮色清爽
+    theme = "macaron"           # 界面主题，填 themes/ 下的文件夹名
+                                # 内置: "dark"（暗色沉浸）、"light"（亮色清爽）、
+                                #       "macaron"（马卡龙水彩）
+                                # 自定义: 建 themes/my-theme/，填 "my-theme"
 
     [opponent_decks]
-    presets = ["炎兽", "闪刀姬"]  # 对方卡组预设（下拉菜单选项）
+    presets = ["炎兽", "闪刀姬"]  # 对方卡组预设（记录表格下拉菜单选项）
 
     [recorder]
-    daily_files = false           # 是否按日期分文件存储数据
+    daily_files = false           # 是否按日期分文件存储 CSV
+
+    [floating_window]
+    width = 250                   # 悬浮窗宽度（像素）
+    height = 300                  # 悬浮窗高度（像素）
+    bg_color = "#BDEF0A"          # 悬浮窗背景色（十六进制 RGB）
+    opacity = 50                  # 不透明度 0-100（0=全透明, 100=不透明）
+    font_size = 20                # 悬浮窗文字字号（像素）
+    text_color = "#000000"        # 悬浮窗文字颜色
+    font_family = "Microsoft YaHei"  # 悬浮窗字体（空则用全局字体）
 
 ================================================================================
 TOML 解析
@@ -63,11 +75,17 @@ def load_config() -> dict[str, Any]:
 
     返回值示例:
         {
-            "detection": {"interval": 0.5, "confidence_threshold": 0.8},
-            "window": {"width": 1100, "height": 700},
-            "appearance": {"theme": "dark"},
-            "opponent_decks": {"presets": ["炎兽", "闪刀姬"]},
+            "detection": {"interval": 0.3, "confidence_threshold": 0.8},
+            "window": {"width": 1300, "height": 700},
+            "appearance": {"theme": "macaron"},
+            "opponent_decks": {"presets": ["炎兽", "闪刀姬", "烙印", "白银城"]},
             "recorder": {"daily_files": False},
+            "floating_window": {
+                "width": 250, "height": 300,
+                "bg_color": "#BDEF0A", "opacity": 50,
+                "font_size": 20, "text_color": "#000000",
+                "font_family": "Microsoft YaHei",
+            },
         }
 
     异常:

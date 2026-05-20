@@ -1,241 +1,380 @@
-"""后台识别工作线程 — 定时截图并用模板匹配识别对局信息。
+"""后台识别工作线程 — 定时截图并用模板匹配识别 Master Duel 对局信息。
 
 ================================================================================
-设计原理
+为什么需要独立线程？
 ================================================================================
 
-本模块定义 StatsWorker 类，继承自 PySide6 的 QThread。
-将图像识别逻辑放在独立线程中的原因:
+程序的"启动"按钮被点击后，会进入一个无限循环：
+    每隔 N 秒截图 → 和模板图片比 → 判断是否匹配 → 重复
 
-    1. 不阻塞 GUI: 截图 + 模板匹配是 CPU 密集型操作，如果在主线程执行，
-       会导致 GUI 界面冻结、按钮无响应。
+如果在主线程（GUI 线程）里跑这个循环，后果是：
+    - 截图和图像匹配是 CPU 密集型操作，会占用主线程的全部时间
+    - Qt 的事件循环（event loop）被阻塞，按钮点击无响应
+    - 窗口拖不动、关不掉、界面"假死"
 
-    2. 定时循环: 需要每隔 N 秒（默认 0.5s）执行一次截图和识别，
-       使用 QThread.msleep() 不会阻塞 Qt 事件循环。
-
-    3. 线程安全通信: 通过 Qt 的信号/槽机制（Signal/Slot）将识别结果
-       发送到主线程更新 GUI，这是 Qt 中跨线程通信的标准做法。
+解决方案：用 PySide6 的 QThread 把循环放到后台线程。
+    主线程 → 负责画界面、处理鼠标点击
+    工作线程 → 负责截图、模板匹配、发信号通知主线程
 
 ================================================================================
-状态机（三阶段）
+线程间通信：Signal（信号）/ Slot（槽）
 ================================================================================
 
-识别过程使用三状态的状态机，对应 Master Duel 对局的三个阶段:
+Qt 的 Signal/Slot 机制是线程安全的：
+
+    工作线程（子线程）               主线程（GUI 线程）
+    ─────────────────                ─────────────────
+    self.result_detected.emit("win") → MainWindow._on_result_detected()
+                                           ↓
+                                      写入 CSV、刷新表格、更新状态栏
+
+    子线程只需要 emit 信号，Qt 会自动把信号投递到主线程的事件队列中，
+    由主线程在处理事件时执行对应的槽函数。子线程不用关心 GUI 更新细节。
+
+================================================================================
+状态机（三阶段顺序识别）
+================================================================================
+
+Master Duel 的一局对局有三个阶段，出现顺序是固定的：
 
     ┌──────────────┐  赢/输硬币识别   ┌──────────────┐  先/后攻识别    ┌───────────────┐
     │ WAITING_COIN │───────────────→│ WAITING_TURN │──────────────→│ WAITING_RESULT│
     │ (等待硬币)    │                │ (等待先后攻)    │               │ (等待胜负)    │
     └──────────────┘                └──────────────┘               └───────┬───────┘
            ↑                                                               │
-           │                      胜负识别成功                               │
+           │                      胜负识别成功，回起点                  │
            └───────────────────────────────────────────────────────────────┘
 
+为什么用状态机而不是每帧所有模板都跑一遍？
+    - 速度更快：每次只跑当前阶段相关的 2 张模板，而不是 6 张全跑
+    - 防止误匹配：胜负界面里可能有类似"先攻"的文字，但不是对局中的先后攻提示
+
 状态说明:
-    - WAITING_COIN:  当前不在对局中，等待硬币画面出现。
-                     检测到赢/输硬币后切换到 WAITING_TURN。
-
-    - WAITING_TURN:  硬币已识别，等待先后攻 UI 出现。
-                     检测到先攻/后攻后切换到 WAITING_RESULT。
-
-    - WAITING_RESULT: 先后攻已知，等待对局结束的结果画面。
-                      检测到胜利/失败后写入 CSV 并切回 WAITING_COIN。
-
-启动流程: 获取客户区尺寸 → set_resolution → init_templates（预加载缓存）。
-         模板缺失时 worker 直接退出，状态栏显示具体缺失信息。
-
-顺序依赖: 前一个阶段未识别到，不会尝试识别后续阶段。
-         这防止了误将结果界面中的元素识别为硬币/先后攻等问题。
+    WAITING_COIN  → 等待硬币画面出现。检测到赢/输硬币后 → WAITING_TURN
+    WAITING_TURN  → 硬币已识别，等待先后攻 UI 出现。检测到后 → WAITING_RESULT
+    WAITING_RESULT → 先后攻已知，等待对局结束。检测到胜负后写 CSV → WAITING_COIN
 
 ================================================================================
-线程安全
+线程安全说明
 ================================================================================
 
-- _running 标志: 简单的布尔值，由主线程在 stop() 中设为 False，
-  工作线程在 while 循环中检查。在 CPython 中，由于 GIL 的存在，
-  布尔值的读写是原子操作，不会出现数据竞争。
+线程安全是指：多个线程同时访问同一块数据时不会出错。
 
-- Signal 发射: PySide6 的 Signal 是线程安全的，可以在子线程中 emit，
-  Qt 会自动将信号投递到主线程的事件队列中处理。
+本程序中：
+    - _running 标志：主线程在 stop() 中设为 False，工作线程在 while 循环中读取。
+      在 CPython（标准 Python 解释器）中，有 GIL（全局解释器锁）的保护，
+      布尔值的简单读写是原子的（不会被拆成多次操作），不会有数据竞争。
 
-- 停止机制: stop() 设置 _running = False，线程在下一次循环迭代时退出。
-  最坏情况下等待时间 = interval（默认 0.5 秒）。
+    - _state 状态：只在工作线程的 run() 循环中写入，主线程的 jump_to() 也写入。
+      虽然理论上存在竞争条件，但实际影响微乎其微——最坏情况是多等一帧（interval 秒）。
+
+    - Signal emit：PySide6 保证跨线程 emit 信号的安全性。
+
+    - 停止方式：stop() 设 _running = False，不使用 QThread.terminate()。
+      terminate() 是暴力终止，可能导致锁未释放、文件未关闭等问题。
 """
 
 
 from PySide6.QtCore import QThread, Signal
 
-from src import capture as _cap
-from src import detector as _det
+from src import capture as _cap    # 截图模块：定位窗口、截取客户区
+from src import detector as _det   # 识别模块：模板匹配
 from src.config import load_config
 
+
+# =============================================================================
+# StatsWorker — 后台识别工作线程
+# =============================================================================
 
 class StatsWorker(QThread):
     """后台工作线程：循环执行"截图 → 识别硬币 → 识别先后攻 → 识别胜负"。
 
-    Signals:
-        status_update(str):
-            状态更新消息，显示在 GUI 状态栏中。
+    =========================================================================
+    生命周期
+    =========================================================================
 
-        coin_win_detected(str):
-            硬币输赢识别结果。
-            取值为 'win'（赢硬币）或 'lose'（输硬币）。
+    1. MainWindow._on_start() 创建 StatsWorker 并调用 worker.start()
+       → QThread.start() 自动在后台线程中执行 run() 方法
 
-        turn_detected(str):
-            先后攻识别结果。
-            取值为 'first'（先攻）或 'second'（后攻）。
+    2. run() 进入主循环，持续截图识别，emit 信号通知主线程
 
-        result_detected(str):
-            对局胜负识别结果。
-            取值为 'win'（胜）或 'lose'（负）。
+    3. MainWindow._on_stop() 调用 worker.stop() 设 _running = False
+       → 工作线程在下一次循环检查时退出
 
-    Attributes:
-        _interval:   截图间隔时间（秒），从配置读取。
-        _threshold:  模板匹配置信度阈值，从配置读取。
-        _running:    bool，控制线程运行/停止。
-        _state:      str，当前状态机状态。
+    4. 工作线程退出后发射 finished 信号，MainWindow 安全清理 worker 对象
+
+    =========================================================================
+    Signals（信号——工作线程发射，主线程接收）
+    =========================================================================
+
+    status_update(str)     — 状态栏消息更新
+    coin_win_detected(str) — 硬币识别结果: 'win'（赢）或 'lose'（输）
+    turn_detected(str)     — 先后攻结果: 'first'（先攻）或 'second'（后攻）
+    result_detected(str)   — 对局结果: 'win'（胜）或 'lose'（负）
+
+    =========================================================================
+    与 MainWindow 手动按钮的联动
+    =========================================================================
+
+    当用户使用手动按钮（赢硬币/先攻/后攻/胜/负）时，主线程调用
+    jump_to(stage) 强制跳转状态。这样手动录入和自动识别共享同一状态机，
+    互不冲突——手动录入后自动识别直接从新状态继续。
     """
 
-    # -----------------------------------------------------------------------
-    # Qt 信号定义
-    # -----------------------------------------------------------------------
-    status_update = Signal(str)
-    coin_win_detected = Signal(str)
-    turn_detected = Signal(str)
-    result_detected = Signal(str)
+    # ---- Qt 信号定义 ----
+    status_update = Signal(str)       # 状态栏消息
+    coin_win_detected = Signal(str)   # 硬币识别结果
+    turn_detected = Signal(str)       # 先后攻识别结果
+    result_detected = Signal(str)     # 对局胜负结果
 
-    # 外部阶段编号 → 内部状态名映射（只分配一次）
+    # ---- 常量映射（类属性，所有实例共享一份，节省内存） ----
+
+    # 手动按钮的阶段编号 → 内部状态名
+    # stage 0 = 等硬币, stage 1 = 等先后攻, stage 2 = 等胜负
     _STAGE_MAP: dict[int, str] = {
         0: "WAITING_COIN", 1: "WAITING_TURN", 2: "WAITING_RESULT"
     }
 
-    # 状态 → 状态栏消息
+    # 每个状态下在状态栏显示的文字
     _STATE_MSGS: dict[str, str] = {
         "WAITING_COIN": "正在运行 — 等待识别硬币…",
         "WAITING_TURN": "正在运行 — 等待识别先后攻…",
         "WAITING_RESULT": "正在运行 — 等待识别胜负…",
     }
 
+    # =========================================================================
+    # __init__ — 初始化
+    # =========================================================================
+
     def __init__(self, parent=None):
-        """初始化工作线程。从 config.toml 读取截图间隔和匹配阈值。"""
+        """初始化工作线程。
+
+        从 config.toml 读取两个关键参数：
+            detection.interval           — 截图间隔（秒），默认 0.5
+            detection.confidence_threshold — 匹配置信度阈值 (0.0~1.0)，默认 0.8
+
+        初始状态为 WAITING_COIN，线程尚未启动（等待 start() 调用）。
+        """
         super().__init__(parent)
         cfg = load_config()
         self._interval: float = cfg.get("detection", {}).get("interval", 0.5)
         self._threshold: float = cfg.get("detection", {}).get("confidence_threshold", 0.8)
-        self._running = False
-        self._state = "WAITING_COIN"
+        self._running = False        # True = 线程正在运行（由 start() 后的 run() 设置）
+        self._state = "WAITING_COIN" # 初始状态：等待检测硬币
+
+    # =========================================================================
+    # 内部辅助方法
+    # =========================================================================
 
     def _skip(self) -> None:
-        """休眠一个间隔后继续循环。"""
+        """休眠 interval 秒。
+
+        QThread.msleep() 是线程安全的休眠函数，只休眠当前线程，
+        不会阻塞主线程的 Qt 事件循环。如果直接用 time.sleep() 也一样，
+        但 msleep() 是 Qt 的惯例写法。
+
+        休眠时间 = interval（秒）× 1000（转毫秒）。
+        """
         self.msleep(int(self._interval * 1000))
 
     def _handle_pause(self, paused: bool) -> bool:
-        """窗口不可用时的暂停处理：发一次状态消息，休眠，返回 True。
+        """处理"窗口不可用"的暂停状态。
 
-        在主循环中多次出现相同的"检测到窗口不可用 → 发消息 → 休眠"模式，
-        统一提取到此方法中。
+        在主循环中，有两种情况会导致暂停：
+            1. 窗口最小化 → 不需要截图，因为看不到内容
+            2. 分辨率变化导致模板重载 → 暂时无法识别
+
+        暂停期间：
+            - 发一次状态消息（只发一次，避免刷屏）
+            - 休眠 interval 秒后重试
+            - 返回 True 表示当前处于暂停状态
+
+        注意：minimized 状态是 Master Duel 窗口特有的概念——
+        全屏游戏在切换桌面时，GetClientRect 会返回 (0, 0)。
         """
         if not paused:
+            # 首次进入暂停：发一次状态消息
             paused = True
             if _cap.is_window_minimized("masterduel"):
                 self.status_update.emit("窗口已最小化 — 等待恢复…")
-        self._skip()
-        return paused
+        self._skip()         # 休眠等待
+        return paused        # 返回暂停标志
 
     def _ensure_templates(self, last_size: tuple[int, int] | None) -> tuple[int, int] | None:
-        """检测分辨率变化并刷新模板缓存。返回当前客户区尺寸或 None。
+        """检测 Master Duel 窗口分辨率是否变化，变化时刷新模板缓存。
 
-        窗口最小化时 GetClientRect 返回 (0, 0)，通过 case guard 过滤掉。
+        为什么要动态检测分辨率？
+            用户可能：
+            1. 切换游戏的全屏/窗口模式，分辨率改变
+            2. 更换显示器，分辨率改变
+            3. 调节游戏内的渲染分辨率
+
+        如果分辨率变了但模板还是旧的，匹配率会极低甚至全失败。
+        所以每次循环都检查：当前分辨率 ≠ 上次分辨率 → 重新加载模板。
+
+        返回:
+            当前客户区 (宽, 高)，如果窗口不可用则返回 None。
+
+        特殊情况处理：
+            - GetClientRect 返回 (0, 0)：窗口最小化或未就绪 → 返回 None
+            - 模板加载失败（如文件夹缺失）：emit 错误消息 → 返回 None
         """
         match _cap.get_client_size("masterduel"):
-            case (w, h) if w > 0 and h > 0:
-                if (w, h) != last_size:
-                    _det.set_resolution(w, h)
-                    msg = _det.init_templates()
-                    if msg is not None:
+            case (w, h) if w > 0 and h > 0:            # 窗口可用，尺寸有效
+                if (w, h) != last_size:                 # 分辨率变了
+                    _det.set_resolution(w, h)            # 设置新分辨率
+                    msg = _det.init_templates()          # 重新加载模板
+                    if msg is not None:                  # 模板加载失败
                         self.status_update.emit(msg)
                         return None
                 return w, h
-            case _:
+            case _:                                     # 窗口不可用
                 return None
 
+    # =========================================================================
+    # run() — 工作线程的主循环（由 QThread.start() 自动调用）
+    # =========================================================================
+
     def run(self) -> None:
-        """线程的入口函数（由 QThread.start() 自动调用）。
+        """线程入口函数，包含"启动等待"和"主循环"两个阶段。
 
-        启动阶段:
-            等待窗口可用并加载模板。窗口最小化或未启动时自动重试，
-            恢复后自动继续，无需手动重启。
+        =====================================================================
+        启动阶段
+        =====================================================================
 
-        主循环:
-            1. 检测分辨率变化，变化时刷新模板缓存
-            2. 窗口最小化时跳过本轮
-            3. 截取 Master Duel 窗口客户区
-            4. 根据当前状态执行对应的识别
-            5. 识别成功后发射信号并切换到下一状态
-            6. 休眠 interval 秒
-            7. 检测窗口是否仍在运行，若已关闭则自动停止
+        目标：等待 Master Duel 窗口出现、加载模板图片。
+
+        过程：
+            1. 循环检测窗口是否可用（GetClientRect 返回有效尺寸）
+            2. 窗口可用 → 加载模板 → 成功则进入主循环
+            3. 窗口不可用 → 休眠 interval 秒 → 重试
+            4. 如果窗口最小化 → 发状态消息提示用户
+
+        这个阶段不会导致 CPU 飙升，因为每次循环都休眠 interval 秒。
+
+        =====================================================================
+        主循环（每轮执行以下步骤）
+        =====================================================================
+
+        每轮循环的步骤：
+
+            [0] 检查分辨率是否变化（变化时重载模板）
+            [1] 检查窗口是否最小化（最小化时跳过）
+            [2] 截取 Master Duel 窗口客户区
+            [3] 根据当前状态执行对应识别
+            [4] 休眠 interval 秒
+            [5] 检查 Master Duel 是否仍然运行
+
+        状态机识别逻辑（第3步的细节）：
+
+            WAITING_COIN:
+                detect_coin_win() 用 win/lose 两张模板匹配屏幕
+                  → 匹配到 win → emit coin_win_detected('win') → WAITING_TURN
+                  → 匹配到 lose → emit coin_win_detected('lose') → WAITING_TURN
+                  → 都没匹配上 → 跳过，下轮继续
+
+            WAITING_TURN:
+                detect_turn() 用 first/second 两张模板匹配屏幕
+                  → 匹配到 first → emit turn_detected('first') → WAITING_RESULT
+                  → 匹配到 second → emit turn_detected('second') → WAITING_RESULT
+                  → 都没匹配上 → 跳过，下轮继续
+
+            WAITING_RESULT:
+                detect_result() 用 victory/defeat 两张模板匹配屏幕
+                  → 匹配到 win → emit result_detected('win') → WAITING_COIN（回起点）
+                  → 匹配到 lose → emit result_detected('lose') → WAITING_COIN
+                  → 都没匹配上 → 跳过，下轮继续
+
+        =====================================================================
+        退出条件
+        =====================================================================
+
+        线程在以下情况退出 while 循环：
+            1. _running 被设为 False（stop() 被调用）
+            2. Master Duel 窗口关闭（is_window_open 返回 False）
         """
         self._running = True
 
-        # ---- 启动阶段：等待窗口可用并初始化模板 ----
+        # ================================================================
+        # 启动阶段：等待 Master Duel 窗口可用 + 加载模板
+        # ================================================================
         self.status_update.emit("正在运行 — 等待 Master Duel 窗口…")
-        _last_resolution = None
-        _warned = False
+        _last_resolution = None   # 上一次的分辨率（用于检测变化）
+        _warned = False           # 是否已经发过"窗口最小化"的提示（避免刷屏）
         while self._running:
-            size = self._ensure_templates(_last_resolution)
+            size = self._ensure_templates(_last_resolution)  # 尝试获取分辨率+加载模板
             if size is not None:
                 _last_resolution = size
-                break
+                break  # 成功加载模板，跳出启动等待循环
+            # 窗口不可用：发提示（只发一次），然后休眠重试
             if not _warned and _cap.is_window_minimized("masterduel"):
                 self.status_update.emit("Master Duel 窗口已最小化 — 请恢复窗口")
                 _warned = True
             self._skip()
-        if not self._running:
+        if not self._running:    # stop() 在等待期间被调用
             return
 
+        # 启动完成，进入初始状态
         self._state = "WAITING_COIN"
         self.status_update.emit("正在运行 — 等待识别硬币…")
 
-        # ---- 主循环 ----
-        _paused = False
+        # ================================================================
+        # 主循环
+        # ================================================================
+        _paused = False  # 暂停标志（窗口不可用时设为 True）
+
         while self._running:
-            # ---- 第 0 步：每轮更新模板分辨率 ----
+
+            # [0] 每轮都检查分辨率（用户可能中途切换分辨率）
             size = self._ensure_templates(_last_resolution)
             if size is None:
                 _paused = self._handle_pause(_paused)
-                continue
+                continue  # 跳过本轮，下轮重试
 
-            # ---- 第 1 步：检测窗口是否最小化 ----
+            # [1] 检查窗口是否最小化（全屏游戏切桌面时视为最小化）
             if _cap.is_window_minimized("masterduel"):
                 _paused = self._handle_pause(_paused)
                 continue
 
+            # 窗口恢复可用时，发出"恢复识别"的状态消息
             if _paused:
                 _paused = False
                 self.status_update.emit(
                     self._STATE_MSGS.get(self._state, "正在运行")
                 )
-            _last_resolution = size
+            _last_resolution = size  # 更新分辨率记录
 
-            # ---- 第 2 步：截取 Master Duel 窗口 ----
+            # [2] 截取 Master Duel 窗口客户区
+            #     capture_window 内部用 mss 库做高性能截图（Windows 上走 DirectX）
             try:
                 screenshot = _cap.capture_window("masterduel")
             except (OSError, RuntimeError) as e:
+                # 截图失败通常是因为窗口刚好关闭或失去焦点
                 self.status_update.emit(f"截图失败: {e}")
                 self._skip()
                 continue
 
-            # ---- 第 3 步：根据当前状态执行对应阶段的识别 ----
+            # [3] 状态机：根据当前阶段执行对应识别
+            #
+            #     每个 detect_xxx 函数内部会：
+            #        a) 根据当前分辨率选择模板子目录
+            #        b) 用 OpenCV matchTemplate 逐模板匹配
+            #        c) 取最高匹配度，和 threshold 比较
+            #        d) 返回匹配到的结果字符串 或 None
+            #
             if self._state == "WAITING_COIN":
+                # 检测硬币输赢（模板：coin_win.png / coin_lose.png）
                 coin_win = _det.detect_coin_win(screenshot, self._threshold)
                 if coin_win:
-                    self.coin_win_detected.emit(coin_win)
+                    self.coin_win_detected.emit(coin_win)    # 通知主线程
                     coin_text = "赢硬币" if coin_win == "win" else "输硬币"
                     self.status_update.emit(
                         f"已识别: {coin_text} — 等待识别先后攻…"
                     )
-                    self._state = "WAITING_TURN"
+                    self._state = "WAITING_TURN"              # 状态前进一步
 
             elif self._state == "WAITING_TURN":
+                # 检测先后攻（模板：go_first.png / go_second.png）
                 turn = _det.detect_turn(screenshot, self._threshold)
                 if turn:
                     self.turn_detected.emit(turn)
@@ -246,37 +385,64 @@ class StatsWorker(QThread):
                     self._state = "WAITING_RESULT"
 
             elif self._state == "WAITING_RESULT":
+                # 检测胜负（模板：victory.png / defeat.png）
                 result = _det.detect_result(screenshot, self._threshold)
                 if result:
-                    self.result_detected.emit(result)
+                    self.result_detected.emit(result)          # 通知主线程写入 CSV
                     result_text = "胜" if result == "win" else "负"
                     self.status_update.emit(
                         f"已识别结果: {result_text} — 等待下一局…"
                     )
-                    self._state = "WAITING_COIN"
+                    self._state = "WAITING_COIN"               # 回到起点，等下一局
 
-            # ---- 第 4 步：休眠等待下一轮 ----
+            # [4] 休眠 interval 秒
             self._skip()
 
-            # ---- 第 5 步：检测 Master Duel 窗口是否仍在运行 ----
+            # [5] 检查 Master Duel 窗口是否仍然在运行
+            #     is_window_open 用 pywin32 的 EnumWindows 遍历顶层窗口
             if not _cap.is_window_open("masterduel"):
                 self._running = False
                 self.status_update.emit("程序已关闭 — Master Duel 窗口未找到")
                 break
 
-    def jump_to(self, stage: int) -> None:
-        """外部通知阶段跳转 — 手动按钮触发时，主线程调用此方法同步状态。
+    # =========================================================================
+    # jump_to — 手动按钮跳转状态（主线程调用）
+    # =========================================================================
 
-        Args:
-            stage: 0=等硬币, 1=等先后攻, 2=等胜负。
+    def jump_to(self, stage: int) -> None:
+        """外部通知阶段跳转 — 手动按钮触发时同步状态。
+
+        当用户点击手动按钮（如"赢硬币"→"先攻"→"胜"）时，
+        MainWindow 调用此方法强制跳转状态机。
+
+        例如用户手动点了"赢硬币"：
+            jump_to(1) → _state = "WAITING_TURN"（跳过自动识别硬币的步骤）
+
+        映射关系（定义在 _STAGE_MAP 中）：
+            stage 0 → WAITING_COIN（等硬币）
+            stage 1 → WAITING_TURN（等先后攻）
+            stage 2 → WAITING_RESULT（等胜负）
         """
         self._state = self._STAGE_MAP[stage]
+
+    # =========================================================================
+    # stop — 停止线程
+    # =========================================================================
 
     def stop(self) -> None:
         """停止工作线程。
 
-        设置 _running = False，线程将在下一次循环检查时退出。
-        不会立即中断线程（不使用 terminate()），保证资源正确释放。
+        实现方式：设置 _running = False，线程在下一次 while 循环检查时退出。
+
+        为什么不直接用 QThread.terminate()？
+            terminate() 是暴力杀死线程，相当于任务管理器结束进程：
+                - 可能带着未释放的锁退出（死锁风险）
+                - 打开的文件可能来不及关闭
+                - 已分配的内存可能泄漏
+            Qt 官方建议用标志位 + 循环检查的方式优雅退出。
+
+        最坏情况：线程刚进入 self._skip() 休眠，需要等待 interval 秒才能退出。
+        如果要立即退出，可以在 stop() 之前先调用 self.quit() + self.wait(timeout)。
         """
         self._running = False
         self.status_update.emit("已停止")

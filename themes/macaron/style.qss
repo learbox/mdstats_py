@@ -1,30 +1,53 @@
 /* ============================================================
    统一 QSS 模板 — 所有主题共享此结构。
-   颜色用 {color.key} 占位符，图片用 {asset.key} 占位符。
+
+   QSS 是 Qt 的样式表语言，语法类似 CSS。本项目通过以下机制实现主题切换：
+     1. 颜色用 {{color.xxx}} 占位符 → 运行时替换为 theme.toml 中的色值
+     2. 图片用 {{asset.xxx}} 占位符 → 运行时替换为图片文件路径
+     3. 字体/字号用 {{assets.xxx}} 占位符 → 运行时替换为 theme.toml 中的值
+
    新建主题只需修改 theme.toml，无需编辑此文件。
    ============================================================ */
 
-QMainWindow { background-color: {{color.main_bg}}; }
+/* ==================================================================
+   全局默认样式 — 作用于所有 QWidget 及其子类
+   ================================================================== */
+QMainWindow {
+    background-color: {{color.main_bg}};  /* 窗口背景色，先涂一层纯色兜底 */
+}
 QWidget {
-    color: {{color.text_primary}};
-    font-family: {{assets.font_family}};
-    font-size: {{assets.font_size}}px;
+    color: {{color.text_primary}};        /* 全局默认文字色 */
+    font-family: {{assets.font_family}};  /* 全局默认字体 */
+    font-size: {{assets.font_size}}px;    /* 全局默认字号 */
 }
 
-/* 显式声明字体 —— Qt QSS 在更具体的选择器上有时会忽略 QWidget 的 font-family 继承 */
+/* 显式声明字体 —— Qt QSS 在更具体的选择器上有时会忽略 QWidget 的 font-family 继承，
+   所以需要给每个常用控件单独声明一次字体 */
 QPushButton, QLineEdit, QLabel, QTableWidget, QHeaderView, QHeaderView::section,
 QComboBox, QComboBox QAbstractItemView, QMessageBox, QToolTip {
     font-family: {{assets.font_family}};
 }
 
-/* ---------- 主背景 ---------- */
+/* ==================================================================
+   #contentWidget — 主窗口全幅背景
+   这是从 .ui 文件加载的中心控件，覆盖 QMainWindow 的整个客户区。
+   border-image 会把 main_bg.png 拉伸填充（如果配置了图片），
+   background-color 纯色兜底（图片不存在时用纯色）。
+   border-radius 给四个角加圆角，配合无边框窗口实现圆角窗口效果。
+   ================================================================== */
 #contentWidget {
     border-image: url({{asset.main_bg}}) 0 0 0 0 stretch stretch;
     background-color: {{color.main_bg}};
     border-radius: 8px;
 }
 
-/* ---------- 顶部 / 底部面板 ---------- */
+/* ==================================================================
+   QFrame#topPanel / #bottomPanel — 顶部控制栏和底部按钮面板
+
+   这两个 QFrame 包裹了 ctrlLayout（控制栏）和 bottomLayout（底部按钮栏），
+   让 QSS 可以给它们单独贴背景图（panel_bg.png），实现与主背景不同的材质感。
+   background: transparent 表示不涂纯色，border-image 叠加在水彩纹理上。
+   ================================================================== */
 QFrame#topPanel, QFrame#bottomPanel {
     border-image: url({{asset.panel_bg}}) 0 0 0 0 stretch stretch;
     background-color: transparent;
@@ -33,19 +56,31 @@ QFrame#topPanel, QFrame#bottomPanel {
     padding: 4px;
 }
 
-/* ---------- 标题栏 ---------- */
+/* ==================================================================
+   标题栏 — 自定义窗口标题栏
+
+   #titleBar 是 TitleBar 控件，放在 content 布局的最顶部。
+   背景透明让它透出下方 contentWidget 的背景色（或 #topPanel 的面板图）。
+   border-top-left/right-radius 让标题栏的圆角与 contentWidget 对齐。
+   ================================================================== */
 #titleBar {
     background: transparent;
     border-top-left-radius: 8px;
     border-top-right-radius: 8px;
 }
+/* 标题栏按钮（最小化/关闭）：透明背景 + 4px 圆角，hover 样式由 Python 代码动态设置 */
 #titleMinBtn, #titleCloseBtn {
     background: transparent;
     border: none;
     border-radius: 4px;
 }
 
-/* ---------- 状态栏 ---------- */
+/* ==================================================================
+   #customStatusBar — 底部状态栏
+
+   显示"就绪 — 请点击《启动》开始"等状态消息，以及右下角的检测信息。
+   border-bottom-left/right-radius 让状态栏的圆角与 contentWidget 对齐。
+   ================================================================== */
 #customStatusBar {
     border-image: url({{asset.statusbar_bg}}) 0 0 0 0 stretch stretch;
     background-color: {{color.statusbar_bg}};
@@ -53,6 +88,7 @@ QFrame#topPanel, QFrame#bottomPanel {
     border-bottom-left-radius: 10px;
     border-bottom-right-radius: 10px;
 }
+/* 状态栏左侧的消息文字，用 secondary 色比正文柔和 */
 #statusMessage {
     color: {{color.text_secondary}};
     background: transparent;
@@ -60,7 +96,15 @@ QFrame#topPanel, QFrame#bottomPanel {
     font-size: 12px;
 }
 
-/* ---------- 按钮 ---------- */
+/* ==================================================================
+   QPushButton — 所有按钮（默认状态 + 交互伪状态）
+
+   Qt 的按钮支持四种伪状态：
+     :hover    — 鼠标悬停
+     :pressed  — 鼠标按下
+     :disabled — 按钮被禁用（灰色显示）
+   每种状态都有独立的背景色和边框色，形成"交互反馈"的效果。
+   ================================================================== */
 QPushButton {
     background-color: {{color.button_bg}};
     color: {{color.text_primary}};
@@ -82,7 +126,11 @@ QPushButton:disabled {
     border-color: {{color.border_disabled}};
 }
 
-/* ---------- 输入框 ---------- */
+/* ==================================================================
+   QLineEdit — 文本输入框（如卡组名称输入框）
+
+   :focus 状态用强调色边框，提示用户"这里正在输入"。
+   ================================================================== */
 QLineEdit {
     background-color: {{color.input_bg}};
     color: {{color.text_primary}};
@@ -99,13 +147,26 @@ QLineEdit:disabled {
     color: {{color.text_disabled}};
 }
 
-/* ---------- 标签 ---------- */
+/* ==================================================================
+   QLabel — 文本标签
+   透明背景 + 无边框，让文字直接显示在父控件背景上。
+   ================================================================== */
 QLabel {
     background: transparent;
     border: none;
 }
 
-/* ---------- 表格 ---------- */
+/* ==================================================================
+   QTableWidget — 数据表格（统计表格 + 记录表格）
+
+   表格的特殊属性：
+     alternate-background-color — 奇偶行交替色，alternatingRowColors=true 时生效
+     gridline-color              — 单元格之间的网格线颜色
+     selection-background-color  — 选中行/单元格的高亮背景
+     ::item                      — 单个单元格样式
+     ::item:alternate            — 交替行单元格（覆盖 alternate-background-color）
+     ::item:selected             — 选中状态的单元格
+   ================================================================== */
 QTableWidget {
     border-image: url({{asset.table_bg}}) 0 0 0 0 stretch stretch;
     background-color: {{color.widget_bg}};
@@ -130,24 +191,43 @@ QTableWidget::item:selected {
     color: {{color.table_text}};
 }
 
-/* 横向表头 — 整张 header_bg.png 拉伸 */
+/* ==================================================================
+   QHeaderView — 表格表头（列标题 + 行号栏）
+
+   Qt 的表格有横/竖两组表头，分别用不同选择器定位：
+
+     QHeaderView#horizontalHeader  — 列表头（"卡组"、"对局数"、"胜率"...）
+       设置透明背景，下方表头 section 负责画装饰线
+
+     QHeaderView#verticalHeader    — 行表头（行号列）
+       设置透明背景，右侧表头 section 负责画边框
+
+     QHeaderView::section          — 表头的每个格子（单个列标题）
+       border-bottom: 2px 装饰线   — 把列标题和表格数据区分开
+       font-weight: bold           — 列标题文字加粗
+
+     QHeaderView::section:vertical — 行表头的每个格子（单个行号）
+       border-right: 1px 边框      — 把行号和数据分隔开
+
+     QTableCornerButton::section   — 表格左上角的交叉按钮
+       位于横表头和竖表头交汇处，通常为空白
+   ================================================================== */
 QHeaderView#horizontalHeader {
     border-image: url({{asset.header_bg}}) 0 0 0 0 stretch stretch;
     background-color: transparent;
     border: none;
 }
-/* 竖向表头 — 整张 row_header_bg.png 拉伸 */
 QHeaderView#verticalHeader {
     border-image: url({{asset.row_header_bg}}) 0 0 0 0 stretch stretch;
     background-color: transparent;
     border: none;
 }
 QHeaderView::section {
-    border-image: none;
+    border-image: none;              /* 清除可能从图片继承的 border-image */
     background-color: transparent;
     color: {{color.text_primary}};
     border: none;
-    border-bottom: 2px solid {{color.header_accent}};
+    border-bottom: 2px solid {{color.header_accent}};  /* 底部分隔线 */
     padding: 5px 8px;
     font-weight: bold;
     font-size: {{assets.header_font_size}}px;
@@ -157,7 +237,7 @@ QHeaderView::section:vertical {
     background-color: transparent;
     color: {{color.text_primary}};
     border: none;
-    border-right: 1px solid {{color.header_v_border}};
+    border-right: 1px solid {{color.header_v_border}};   /* 右侧分隔线 */
     padding: 0px 4px;
     font-size: {{assets.row_header_font_size}}px;
 }
@@ -169,42 +249,57 @@ QTableCornerButton::section {
     border-right: 1px solid {{color.header_v_border}};
 }
 
-/* ---------- 滚动条 ---------- */
+/* ==================================================================
+   QScrollBar — 滚动条
+
+   滚动条由多个子控件组成：
+     ::handle          — 滑块（可拖拽的部分）
+     ::add-line        — 向下/向右箭头的区域（我们设为 0 隐藏）
+     ::sub-line        — 向上/向左箭头的区域（我们设为 0 隐藏）
+
+   垂直滚动条（:vertical）和水平滚动条（:horizontal）分别设置。
+   background: transparent 让滚动条轨道透明，只显示滑块。
+   ================================================================== */
 QScrollBar:vertical {
     background: transparent;
-    width: 8px;
+    width: 8px;                        /* 垂直滚动条宽度 */
     margin: 0;
 }
 QScrollBar::handle:vertical {
     background-color: {{color.scrollbar_handle}};
     border-radius: 4px;
-    min-height: 30px;
+    min-height: 30px;                  /* 滑块最小高度，太小拖不动 */
 }
 QScrollBar::handle:vertical:hover {
     background: {{color.scrollbar_handle_hover}};
 }
 QScrollBar::add-line:vertical,
 QScrollBar::sub-line:vertical {
-    height: 0;
+    height: 0;                         /* 隐藏上下箭头按钮 */
 }
 QScrollBar:horizontal {
     background: transparent;
-    height: 8px;
+    height: 8px;                       /* 水平滚动条高度 */
 }
 QScrollBar::handle:horizontal {
     background-color: {{color.scrollbar_handle}};
     border-radius: 4px;
-    min-width: 30px;
+    min-width: 30px;                   /* 滑块最小宽度 */
 }
 QScrollBar::handle:horizontal:hover {
     background: {{color.scrollbar_handle_hover}};
 }
 QScrollBar::add-line:horizontal,
 QScrollBar::sub-line:horizontal {
-    width: 0;
+    width: 0;                          /* 隐藏左右箭头按钮 */
 }
 
-/* ---------- 分割器 ---------- */
+/* ==================================================================
+   QSplitter::handle — 表格分割器的拖拽手柄
+
+   统计表格和记录表格之间有一个 QSplitter，用户拖拽手柄调整上下比例。
+   handle:vertical 表示竖直排列的分割器的手柄（即水平方向的拖拽条）。
+   ================================================================== */
 QSplitter::handle {
     background-color: {{color.splitter}};
 }
@@ -215,7 +310,19 @@ QSplitter::handle:vertical {
     height: 3px;
 }
 
-/* ---------- 下拉框 ---------- */
+/* ==================================================================
+   QComboBox — 下拉框
+
+   QComboBox 的组成部分：
+     QComboBox 本体           — 显示当前选中值的区域
+     QComboBox::drop-down     — 右侧的下拉箭头按钮区域
+     QComboBox QAbstractItemView — 点击后弹出的选项列表（独立的顶层窗口）
+       ::item                 — 列表中的每个选项
+
+   subcontrol-origin: padding — drop-down 相对于 QComboBox 的 padding 定位
+   subcontrol-position: top right — 箭头在右上方
+   outline: none              — 去掉 Qt 默认的虚线焦点框
+   ================================================================== */
 QComboBox {
     background-color: {{color.combo_body_bg}};
     color: {{color.text_primary}};
@@ -229,21 +336,25 @@ QComboBox:hover {
 QComboBox::drop-down {
     subcontrol-origin: padding;
     subcontrol-position: top right;
-    width: 20px;
+    width: 20px;                       /* 箭头按钮宽度 */
     border: none;
 }
 QComboBox QAbstractItemView {
     background-color: {{color.combo_list_bg}};
     color: {{color.text_primary}};
     border: 1px solid {{color.combo_border}};
-    selection-background-color: {{color.selection_bg}};
+    selection-background-color: {{color.selection_bg}};  /* 选中项高亮色 */
     outline: none;
 }
 QComboBox QAbstractItemView::item {
-    padding: 4px 8px;
+    padding: 4px 8px;                  /* 每个选项的内边距 */
 }
 
-/* ---------- 消息框 ---------- */
+/* ==================================================================
+   QMessageBox — 消息弹窗（确认对话框、关于对话框等）
+
+   QMessageBox QLabel 选择器只影响弹窗内的文字标签，不影响主窗口的标签。
+   ================================================================== */
 QMessageBox {
     background-color: {{color.msgbox_bg}};
 }

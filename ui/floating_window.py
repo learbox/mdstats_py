@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QGridLayout, QLabel, QWidget
 class FloatingWindow(QWidget):
     """对局统计悬浮窗，7 行 × 2 列表格布局。"""
 
-    _DEFAULT_W = 300
+    _DEFAULT_W = 250
     _DEFAULT_H = 300
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -17,7 +17,7 @@ class FloatingWindow(QWidget):
         self._drag_start = QPoint()
         self._bg_color = QColor(152, 212, 187, 128)
         self._text_color = "#000000"
-        self._font_size = 14
+        self._font_size = 20
         self._font_family = ""
 
         self.setWindowFlags(
