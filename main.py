@@ -44,8 +44,7 @@ def main() -> None:
     """
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
-    window = MainWindow()
-    window.show()
+    window = MainWindow()  # show() 已在 __init__ 中调用，提前显示窗口减少感知延迟
     sys.exit(app.exec())
 
 

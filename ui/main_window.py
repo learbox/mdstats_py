@@ -80,9 +80,8 @@ import subprocess
 from pathlib import Path
 from typing import Any, TypeVar
 
-from PySide6.QtCore import QFile, Qt, QTimer
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon, QPalette
-from PySide6.QtUiTools import QUiLoader
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -96,6 +95,7 @@ from PySide6.QtWidgets import (
     QSplitter,
     QStyledItemDelegate,
     QTableWidget,
+    QWidget,
     QTableWidgetItem,
 )
 
@@ -117,9 +117,6 @@ from src.theme_loader import Theme, load_theme
 from ui.floating_window import FloatingWindow
 from ui.theme_manager import ThemeManager, ThemeWidgets
 from ui.titlebar import TitleBar
-
-# .ui 界面文件的绝对路径（与 main_window.py 同目录）
-UI_FILE = Path(__file__).resolve().parent / "main_window.ui"
 
 # config.toml 的绝对路径（开发模式: 项目根，打包模式: EXE 所在目录）
 _CONFIG_PATH = get_project_root() / "config.toml"
@@ -660,13 +657,15 @@ class MainWindow(QMainWindow):
         self.setMouseTracking(True)            # 启用鼠标跟踪（边缘 resize 需要）
         self._apply_dwm_style()
 
-        # ---- 7. 从 .ui 文件加载界面 ----
-        loader = QUiLoader()
-        ui_file = QFile(str(UI_FILE))
-        ui_file.open(QFile.OpenModeFlag.ReadOnly)
-        content = loader.load(ui_file)         # 加载 .ui 生成控件树
-        ui_file.close()
-        content.setObjectName("contentWidget") # 设置对象名（QSS 通过 #contentWidget 定位）
+        # ---- 7. 加载界面（预编译 .ui 避免 XML 解析，比 QUiLoader 快约 70ms） ----
+        # ⚠ main_window_ui.py 是 pyside6-uic 从 main_window.ui 自动编译生成，
+        #   严禁手动修改。所有界面改动请在 main_window.ui (Qt Designer) 中进行，
+        #   然后运行: pyside6-uic ui/main_window.ui -o ui/main_window_ui.py
+        from ui.main_window_ui import Ui_MainWindow
+        content = QWidget()
+        ui = Ui_MainWindow()
+        ui.setupUi(content)
+        content.setObjectName("contentWidget") # 覆盖 setupUi 设置的 objectName
         self._content = content
 
         # ---- 8. 插入自定义标题栏（到 content 布局的最顶部） ----
@@ -685,6 +684,10 @@ class MainWindow(QMainWindow):
         # 事件过滤器: 让子控件（content widget）的鼠标事件也能触发边缘 resize
         content.setMouseTracking(True)
         content.installEventFilter(self)
+
+        # 提前显示窗口：用 singleShot(0) 延迟到下一帧，确保 __init__ 完整执行后
+        # 再显示，避免 Qt 内部线程在构造未完成时触发
+        QTimer.singleShot(0, self.show)
 
         # ---- 9. 窗口图标 ----
         icon_path = _RESOURCE_DIR / "icons" / "app_icon.png"
@@ -980,12 +983,12 @@ class MainWindow(QMainWindow):
         """点击"停止"按钮: 停止后台识别线程并恢复 UI。
 
         停止方式: 设置 _running = False → 线程自行退出（不使用 terminate()）
-        等待时间: 最多 2 秒（QThread.wait(2000)）
+        等待时间: 最多 500ms（线程在 interval 秒内退出，默认 0.3s）
         线程退出后 finished 信号自动清理引用。
         """
         if self._worker is not None:
             self._worker.stop()
-            self._worker.wait(2000)
+            self._worker.wait(500)
 
         self._reset_stage()                      # 重置状态机
         self._btn_start.setEnabled(True)
@@ -1337,7 +1340,7 @@ class MainWindow(QMainWindow):
 
         # 打开悬浮窗
         cfg = self._config.get("floating_window", {})
-        self._float_window = FloatingWindow(self)
+        self._float_window = FloatingWindow()  # 无 parent，不跟随主窗口最小化
         self._float_window.update_style(cfg)          # 应用 config.toml 中的悬浮窗配置
         self._refresh_float_window()                   # 填入当前统计数据
         self._restore_float_window_pos()               # 恢复上次位置
@@ -1515,11 +1518,15 @@ class MainWindow(QMainWindow):
             self._apply_theme_pixmaps(theme.pixmaps)
             self._apply_theme_to_widgets()                 # 刷新所有控件
 
+        # 悬浮窗已打开 → 用新配置刷新外观
+        if self._float_window is not None:
+            self._float_window.update_style(self._config.get("floating_window", {}))
+
         # Worker 正在运行 → 停止后用新配置重启
         worker_was_running = self._worker is not None
         if worker_was_running:
             self._worker.stop()
-            self._worker.wait(2000)
+            self._worker.wait(500)
             self._start_worker()
 
         self._show_status(
@@ -1646,18 +1653,28 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event: Any) -> None:
         """窗口关闭时保存所有持久化状态，安全停止后台线程和定时器。
 
-        执行顺序:
-            1. 保存主窗口位置
-            2. 保存悬浮窗位置
-            3. 保存列宽
-            4. 停止信息刷新定时器
-            5. 停止等待定时器
-            6. 停止后台工作线程（等待最多 3 秒退出）
-            7. 接受关闭事件
+        合并读写：一次读 .app_state.json → 写入全部状态 → 一次写回，
+        取代原来的三次独立 I/O。
         """
-        self._save_main_window_pos()
-        self._save_float_window_pos()
-        self._save_column_widths()
+        # ---- 合并状态保存（一次读 + 一次写） ----
+        try:
+            with open(_APP_STATE_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            data = {}
+        p = self.pos()
+        data["main_pos"] = [p.x(), p.y()]
+        if self._float_window is not None:
+            fp = self._float_window.pos()
+            data["float_pos"] = [fp.x(), fp.y()]
+        data["stats"] = [self._stats_table.columnWidth(c)
+                         for c in range(self._stats_table.columnCount() - 1)]
+        data["record"] = [self._record_table.columnWidth(c)
+                          for c in range(self._record_table.columnCount() - 1)]
+        with open(_APP_STATE_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
+        # ---- 停止所有定时器和工作线程 ----
         if self._info_timer is not None:
             self._info_timer.stop()
             self._info_timer = None
@@ -1666,7 +1683,7 @@ class MainWindow(QMainWindow):
             self._wait_timer = None
         if self._worker is not None:
             self._worker.stop()
-            self._worker.wait(3000)              # 最多等 3 秒（比 _on_stop 的 2 秒宽松）
+            self._worker.wait(500)           # 线程在 interval 秒内退出（默认 0.3s），500ms 绰绰有余
         event.accept()
 
     def _restore_main_window_pos(self) -> None:

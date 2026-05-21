@@ -8,21 +8,29 @@
 
 ## 打包步骤
 
-### 1. 同步依赖
+### 1. 编译 .ui 文件
+
+修改 `main_window.ui` 后，必须重新编译为 Python：
+
+```bash
+.venv/Scripts/pyside6-uic.exe ui/main_window.ui -o ui/main_window_ui.py
+```
+
+### 2. 同步依赖
 
 ```bash
 uv sync
 ```
 
-### 2. 执行打包
+### 3. 执行打包
 
 ```bash
 .venv/Scripts/pyinstaller.exe MDStats.spec --noconfirm
 ```
 
-打包产物在 `dist/MDStats/` 目录。
+打包产物在 `dist/MDStats/` 目录。`main_window_ui.py` 会被 PyInstaller 自动检测并打包，无需在 spec 中声明。
 
-### 3. 组装发布目录
+### 4. 组装发布目录
 
 themes、csv、resource、config 等需要放在 exe 同级目录（不打包进 exe），以便用户自行修改。
 
@@ -38,11 +46,11 @@ cp .app_state.json dist/release/
 cp docs/README_release.md dist/release/README.md
 ```
 
-### 4. 打包为 ZIP
+### 5. 打包为 ZIP
 
 ```bash
 cd dist/release
-python -c "
+.venv/Scripts/python.exe -c "
 import zipfile, os
 with zipfile.ZipFile('../MDStats-vX.Y.Z.zip', 'w', zipfile.ZIP_DEFLATED) as zf:
     for root, dirs, files in os.walk('.'):
@@ -73,7 +81,7 @@ MDStats/
 
 ## 注意事项
 
-- `themes/` 不打包进 exe，用户可以自行添加/修改主题
-- `csv/` 和 `resource/` 同样放在外部，用户可自行管理数据
-- `MDStats.spec` 中 `datas` 只包含 `ui/main_window.ui`，不要加入 themes 等目录
+- `themes/`、`csv/`、`resource/` 不打包进 exe，用户可自行修改
+- **`main_window_ui.py` 是 pyside6-uic 自动生成的编译产物，严禁手改。** 任何 AI 或人工对它的修改都会在下次编译 .ui 时被覆盖。所有界面修改必须在 `main_window.ui`（Qt Designer）中进行，然后重新编译
+- `main_window.ui` 是源文件，仅用于开发和重新编译，**不需要**放入 exe 包中
 - 打包前确认 `ui/meta.py` 中的版本号已更新

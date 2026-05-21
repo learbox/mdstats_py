@@ -6,10 +6,10 @@ from PySide6.QtWidgets import QGridLayout, QLabel, QWidget
 
 
 class FloatingWindow(QWidget):
-    """对局统计悬浮窗，7 行 × 2 列表格布局。"""
+    """对局统计悬浮窗，8 行 × 2 列表格布局。"""
 
     _DEFAULT_W = 250
-    _DEFAULT_H = 300
+    _DEFAULT_H = 330
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -21,7 +21,8 @@ class FloatingWindow(QWidget):
         self._font_family = ""
 
         self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
+            Qt.WindowType.Window              # 独立顶层窗口，不跟随父窗口最小化
+            | Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.Tool
         )
@@ -33,7 +34,7 @@ class FloatingWindow(QWidget):
         self._grid.setHorizontalSpacing(16)
         self._grid.setVerticalSpacing(6)
 
-        rows = ("卡组", "对局数", "赢 / 输硬币", "赢币概率",
+        rows = ("卡组", "对局数", "胜 / 负", "赢 / 输硬币", "赢币概率",
                 "赢币胜率", "输币胜率", "综合胜率")
         self._labels: list[QLabel] = []
         self._values: list[QLabel] = []
@@ -94,7 +95,7 @@ class FloatingWindow(QWidget):
         self.update()
 
     def update_content(self, deck_name: str, stats: dict | None) -> None:
-        """刷新悬浮窗 7 行 × 2 列数据。"""
+        """刷新悬浮窗 8 行 × 2 列数据。"""
         if stats is None:
             for v in self._values:
                 v.setText("-")
@@ -103,12 +104,15 @@ class FloatingWindow(QWidget):
         self._values[0].setText(deck_name or "(未指定)")
         self._values[1].setText(str(stats.get("对局数", 0)))
         self._values[2].setText(
+            f"{stats.get('胜', 0)} / {stats.get('负', 0)}"
+        )
+        self._values[3].setText(
             f"{stats.get('赢硬币次数', 0)} / {stats.get('输硬币次数', 0)}"
         )
-        self._values[3].setText(str(stats.get("赢硬币概率", "-")))
-        self._values[4].setText(str(stats.get("赢硬币胜率", "-")))
-        self._values[5].setText(str(stats.get("输硬币胜率", "-")))
-        self._values[6].setText(str(stats.get("胜率", "-")))
+        self._values[4].setText(str(stats.get("赢硬币概率", "-")))
+        self._values[5].setText(str(stats.get("赢硬币胜率", "-")))
+        self._values[6].setText(str(stats.get("输硬币胜率", "-")))
+        self._values[7].setText(str(stats.get("胜率", "-")))
 
     # ---- 拖拽 ----
     def mousePressEvent(self, event) -> None:

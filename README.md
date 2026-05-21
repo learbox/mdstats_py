@@ -163,4 +163,13 @@ mdstats_py/
 
 ## 许可证
 
-MIT
+本项目使用 MIT 协议。依赖的第三方库及其协议：
+
+| 库 | 协议 |
+|----|------|
+| PySide6 | LGPL |
+| opencv-python | Apache 2.0 |
+| numpy | BSD-3-Clause |
+| mss | MIT |
+| pywin32 | PSF |
+| tomli | MIT |
