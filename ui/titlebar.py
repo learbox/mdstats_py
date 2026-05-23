@@ -97,17 +97,21 @@ class _TitleBarButton(QPushButton):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)  # 开启抗锯齿（让线条更平滑）
         rect = self.rect()                            # 获取按钮的矩形区域（宽 40px，高 30px）
 
-        # 情况 A：有图片 → 缩放后居中绘制
+        # 情况 A：有图片 → 填满按钮 + hover 半透明遮罩
         if self._icon_pixmap:
+            # 图片填满整个按钮
             pm = self._icon_pixmap.scaled(
-                16, 16,                                # 缩放到 16×16 像素
-                Qt.AspectRatioMode.KeepAspectRatio,     # 保持原图宽高比，不拉伸变形
-                Qt.TransformationMode.SmoothTransformation,  # 使用平滑缩放算法
+                rect.width(), rect.height(),
+                Qt.AspectRatioMode.IgnoreAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
             )
-            # 计算居中位置：图片左上角的 x、y 坐标
-            x = (rect.width() - pm.width()) // 2
-            y = (rect.height() - pm.height()) // 2
-            painter.drawPixmap(x, y, pm)               # 把图片画上去
+            painter.drawPixmap(0, 0, pm)
+            # hover 状态下叠加半透明遮罩，关闭按钮用红色，其余用深色
+            if self.underMouse():
+                if self._icon_name == "title_close":
+                    painter.fillRect(rect, QColor(220, 50, 50, 100))
+                else:
+                    painter.fillRect(rect, QColor(255, 255, 255, 100))
             return
 
         # 情况 B：没有图片 → 用矢量线条回退绘制
@@ -174,6 +178,7 @@ class TitleBar(QWidget):
         # ---- 从主题配置中读取外观参数 ----
         height = config.get("height", 36)           # 标题栏总高度
         icon_size = config.get("icon_size", 20)     # 图标显示尺寸
+        self._assets_dir = assets_dir               # 保存 assets 路径，供 reload_style 用
 
         # ---- 拖拽状态变量 ----
         self._dragging = False       # 标志位：当前是否正在拖拽窗口
@@ -282,13 +287,14 @@ class TitleBar(QWidget):
         """更换程序图标。"""
         self._icon_label.setPixmap(pixmap)
 
-    def reload_style(self, config: dict) -> None:
-        """主题切换后重新应用标题栏样式。
-
-        用户切换主题（如从暗色切到马卡龙）时，MainWindow 会调用此方法，
-        用新主题的颜色、字体配置刷新标题栏的文字和按钮外观。
-        逻辑与 __init__ 中相同，只是控件已存在，只更新样式。
-        """
+    def reload_style(self, config: dict, assets_dir: Path | None = None) -> None:
+        """主题切换后重新应用标题栏样式和图标。"""
+        if assets_dir is not None:
+            self._assets_dir = assets_dir
+            # 重新加载按钮图标
+            for btn, name in ((self._btn_min, "title_min"), (self._btn_close, "title_close")):
+                icon_path = self._assets_dir / f"{name}.png"
+                btn._icon_pixmap = QPixmap(str(icon_path)) if icon_path.exists() else None
         text_color = config.get("text_color", "#cccccc")
         text_size = config.get("text_size", 12)
         title_font_family = config.get("text_font", "")

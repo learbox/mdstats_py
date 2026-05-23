@@ -245,7 +245,7 @@ class ThemeManager:
             )
         )
         w.title_bar.set_title("MD Stats")
-        w.title_bar.reload_style(self.titlebar_cfg)
+        w.title_bar.reload_style(self.titlebar_cfg, self.assets_dir)
 
     def do_apply_pixmaps(self, w: ThemeWidgets) -> None:
         """首次显示窗口时，用 QPalette 贴背景图片。
