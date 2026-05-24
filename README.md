@@ -39,9 +39,12 @@
 ### 环境要求
 
 - Python ≥ 3.11
-- Windows（依赖 `pywin32` 进行窗口定位）
+- Windows（依赖 `pywin32`）/ macOS（依赖 `pyobjc`，**实验性**）
 
-### 使用 uv（推荐）
+### 安装（推荐 uv）
+
+```bash
+git clone https://github.com/learbox/mdstats_py.git
 
 ```bash
 git clone https://github.com/learbox/mdstats_py.git
@@ -52,7 +55,8 @@ uv sync
 ### 使用 pip
 
 ```bash
-pip install mss numpy opencv-python pyside6 pywin32 tomli
+pip install mss numpy opencv-python pyside6 tomli pywin32       # Windows
+pip install mss numpy opencv-python pyside6 tomli pyobjc-framework-Quartz pyobjc-framework-AppKit  # macOS
 ```
 
 ## 准备模板图片

@@ -4,7 +4,7 @@
 
 ## 快速开始
 
-1. 双击 `MDStats.exe` 启动程序
+1. **Windows**：双击 `MDStats.exe` / **macOS**：双击 `MDStats.app`
 2. 启动 Master Duel 游戏
 3. 点击「启动」按钮，自动识别对局信息并记录
 4. 对局结束后数据自动写入 `csv/` 目录
@@ -58,7 +58,7 @@ resource/templates/
 
 ```
 MDStats/
-├── MDStats.exe              # 主程序
+├── MDStats.exe / MDStats.app  # 主程序（Windows / macOS）
 ├── config.toml              # 配置文件
 ├── .app_state.json          # 窗口状态持久化
 ├── csv/                     # 对战数据

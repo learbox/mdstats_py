@@ -87,6 +87,35 @@ with zipfile.ZipFile('../MDStats-vX.Y.Z.zip', 'w', zipfile.ZIP_DEFLATED) as zf:
 
 将 `vX.Y.Z` 替换为实际版本号。
 
+### macOS 打包
+
+macOS 下 PyInstaller 生成的是 `.app` 应用包，而非 `.exe`。
+
+```bash
+# 步骤 1-2 同上
+
+# 3. 执行打包（生成 .app 包）
+pyinstaller main.py \
+  --name MDStats \
+  --icon app_icon.icns \
+  --windowed \
+  --contents-directory .runtime \
+  --noconfirm
+
+# 4. 组装发布目录
+mkdir -p dist/release
+cp -r dist/MDStats.app dist/release/
+cp -r themes dist/release/
+cp -r csv dist/release/
+cp -r resource dist/release/
+cp config.toml dist/release/
+cp .app_state.json dist/release/
+cp docs/README_release.md dist/release/README.md
+
+# 5. 打包 DMG（macOS 磁盘映像）
+hdiutil create -volname "MDStats" -srcfolder dist/release -ov dist/MDStats-vX.Y.Z.dmg
+```
+
 ## 方式二：CI 自动打包（推荐）
 
 本地只需打 tag 推送，GitHub Actions 自动完成编译、打包、组装、创建 Release。
