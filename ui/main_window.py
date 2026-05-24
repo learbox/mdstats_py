@@ -114,7 +114,7 @@ from src.recorder import (
 )
 # capture / stats_worker 延迟导入（启动时才需要 OpenCV，避免程序启动等待 ~260ms）
 from src.theme_loader import Theme, load_theme
-from ui.floating_window import FloatingWindow
+from ui.floating_window import FloatingWindow, _ROW_KEY_MAP
 from ui.theme_manager import ThemeManager, ThemeWidgets
 from ui.titlebar import TitleBar
 
@@ -817,9 +817,8 @@ class MainWindow(QMainWindow):
         self._apply_table_viewport_palette()
         self._apply_static_button_palette()
 
-        # ---- 22. 延迟加载 CSV 数据 ----
-        # QTimer.singleShot(0, ...) 让窗口先渲染，数据在下一帧异步填充
-        QTimer.singleShot(0, self._reload_tables)
+        # ---- 22. 同步加载 CSV 数据（在 __init__ 末尾直接调用，确保列宽恢复先于 show） ----
+        self._reload_tables()
 
     # =========================================================================
     # 底部按钮状态管理
@@ -1198,6 +1197,8 @@ class MainWindow(QMainWindow):
         """重新加载 CSV 数据并刷新两个表格（统计 + 记录）。"""
         self._refresh_stats_table()
         self._refresh_record_table()
+        # 表格填充后即恢复列宽，不依赖 QTimer 时序，调用幂等无副作用
+        self._restore_column_widths()
 
     def _refresh_stats_table(self) -> None:
         """刷新统计表格（上方表格）。
@@ -1340,8 +1341,12 @@ class MainWindow(QMainWindow):
 
         # 打开悬浮窗
         cfg = self._config.get("floating_window", {})
-        self._float_window = FloatingWindow()  # 无 parent，不跟随主窗口最小化
-        self._float_window.update_style(cfg)          # 应用 config.toml 中的悬浮窗配置
+        rows = cfg.get("rows")  # 空列表或 None 都视为使用默认
+        self._float_window = FloatingWindow(rows=rows if rows else None)
+        float_bg = None
+        if cfg.get("use_theme_bg", False) and self._tm.pixmap_paths:
+            float_bg = self._tm.pixmap_paths.get("__float_bg__")
+        self._float_window.update_style(cfg, float_bg_path=float_bg)
         self._refresh_float_window()                   # 填入当前统计数据
         self._restore_float_window_pos()               # 恢复上次位置
         self._float_window.show()
@@ -1449,16 +1454,74 @@ class MainWindow(QMainWindow):
     # 复制统计 / 打开文件
     # =========================================================================
 
+    @staticmethod
+    def _last_record_deck() -> str:
+        """返回最近一次对局记录的卡组名，无记录时返回空字符串。"""
+        records = load_records()
+        return records[-1].get("使用卡组", "").strip() if records else ""
+
     def _copy_to_clipboard(self) -> None:
-        """将统计表格以 TSV 格式复制到系统剪贴板，可直接粘贴到 Excel。"""
+        """将统计表格复制到系统剪贴板。行为受 config.toml [clipboard] 段控制。
+
+        - vertical_layout: true=竖排(key\\tvalue)，false=横排 TSV
+        - scope: "current"=当前卡组，"all"=全部卡组含合计
+        - columns: 要复制的列名列表，空=悬浮窗默认 8 项
+        """
+        from ui.floating_window import _DEFAULT_ROWS
+        cfg = self._config.get("clipboard", {})
         records = load_records()
         stats = compute_stats(records)
 
-        lines = ["\t".join(STATS_COLUMNS)]                       # 表头行
-        for row in stats:
-            lines.append("\t".join(str(row.get(c, "")) for c in STATS_COLUMNS))
+        columns: list[str] = cfg.get("columns") or list(_DEFAULT_ROWS)
+        scope: str = cfg.get("scope", "all")
+        vertical: bool = cfg.get("vertical_layout", False)
 
-        QApplication.clipboard().setText("\n".join(lines))      # 设置剪贴板
+        # 过滤范围
+        if scope == "current":
+            deck_name = self._deck_input.text().strip()
+            if not deck_name:
+                deck_name = self._last_record_deck()
+            matched = [s for s in stats if s.get("卡组") == deck_name]
+            stats = matched if matched else stats
+        # all 模式但只有一个卡组 → 去掉合计行，等同于 current
+        actual_decks = [s for s in stats if s.get("卡组") != "合计"]
+        if scope == "all" and len(actual_decks) <= 1:
+            stats = actual_decks
+            is_single_deck = True
+        else:
+            is_single_deck = False
+
+        if vertical:
+            # 竖排模式：all 每卡组前放 [卡组名]，跳过"卡组"列避免重复
+            lines: list[str] = []
+            for row in stats:
+                deck = row.get("卡组", "")
+                lines.append(f"[{deck}]")
+                for col in columns:
+                    if col == "卡组":
+                        continue  # 卡组名已在标题行，不重复
+                    keys = _ROW_KEY_MAP.get(col, (col,))
+                    if len(keys) == 2:
+                        val = f"{row.get(keys[0], 0)} / {row.get(keys[1], 0)}"
+                    else:
+                        val = row.get(keys[0], "")
+                    lines.append(f"{col}\t{val}")
+            QApplication.clipboard().setText("\n".join(lines))
+        else:
+            # 横排模式（TSV）："胜/负" 等合并列自动展开为 "v1 / v2"
+            lines = ["\t".join(columns)]
+            for row in stats:
+                vals = []
+                for c in columns:
+                    keys = _ROW_KEY_MAP.get(c, (c,))
+                    if len(keys) == 2:
+                        vals.append(f"{row.get(keys[0], 0)} / {row.get(keys[1], 0)}")
+                    else:
+                        key = keys[0]
+                        vals.append(str(row.get(key, "")))
+                lines.append("\t".join(vals))
+            QApplication.clipboard().setText("\n".join(lines))
+
         self._show_status("已复制统计表格到剪贴板")
 
     @staticmethod
@@ -1518,9 +1581,17 @@ class MainWindow(QMainWindow):
             self._apply_theme_pixmaps(theme.pixmaps)
             self._apply_theme_to_widgets()                 # 刷新所有控件
 
-        # 悬浮窗已打开 → 用新配置刷新外观
+        # 悬浮窗已打开 → 用新配置刷新外观和行
         if self._float_window is not None:
-            self._float_window.update_style(self._config.get("floating_window", {}))
+            new_cfg = self._config.get("floating_window", {})
+            new_rows = new_cfg.get("rows")
+            if new_rows:
+                self._float_window.set_rows(new_rows)
+            float_bg = None
+            if new_cfg.get("use_theme_bg", False) and self._tm.pixmap_paths:
+                float_bg = self._tm.pixmap_paths.get("__float_bg__")
+            self._float_window.update_style(new_cfg, float_bg_path=float_bg)
+            self._refresh_float_window()
 
         # Worker 正在运行 → 停止后用新配置重启
         worker_was_running = self._worker is not None

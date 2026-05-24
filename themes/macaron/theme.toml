@@ -86,6 +86,8 @@ corner_bg       = { file = "corner_bg.png", mode = "stretch" }
 button_bg    = { file = "button_texture.png", mode = "tile" }
 # 底部状态栏（#customStatusBar）                    参考: 2055×158
 statusbar_bg = { file = "statusbar_bg.png", mode = "stretch" }
+# 悬浮窗背景图（可选）                               建议: 250×330
+float_bg     = { file = "main_bg.png", mode = "stretch" }
 
 
 # ==============================================================================

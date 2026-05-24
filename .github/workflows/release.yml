@@ -36,7 +36,8 @@ jobs:
             --icon app_icon.ico `
             --noconsole `
             --noupx `
-            --contents-directory .runtime
+            --contents-directory .runtime `
+            --noconfirm
 
       - name: 组装发布目录
         shell: pwsh

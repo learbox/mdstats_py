@@ -512,6 +512,7 @@ _IMAGE_SELECTORS: dict[str, str] = {
     "corner_bg":      "QTableCornerButton::section",    # 左上角交叉按钮
     "button_bg":      "QPushButton",               # 按钮纹理
     "statusbar_bg":   "#customStatusBar",          # 底部状态栏
+    "float_bg":       "__float_bg__",              # 悬浮窗背景图（不匹配 QSS）
 }
 
 

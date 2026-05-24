@@ -1,44 +1,71 @@
-"""悬浮统计窗 — 无边框、半透明、可拖拽、始终置顶。"""
+"""悬浮统计窗 — 无边框、半透明、可拖拽、始终置顶。
+
+支持动态行配置和主题背景图。
+"""
 
 from PySide6.QtCore import Qt, QPoint
-from PySide6.QtGui import QColor, QPainter, QPainterPath
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import QGridLayout, QLabel, QWidget
+
+# 行名 → (统计键元组)，长度 1=单值，2=合并显示 "v1 / v2"
+_ROW_KEY_MAP: dict[str, tuple[str, ...]] = {
+    "卡组":       ("卡组",),
+    "对局数":     ("对局数",),
+    "胜/负":      ("胜", "负"),
+    "赢/输硬币":  ("赢硬币次数", "输硬币次数"),
+    "胜率":       ("胜率",),
+    "综合胜率":   ("胜率",),
+    "赢硬币概率": ("赢硬币概率",),
+    "赢硬币胜率": ("赢硬币胜率",),
+    "输硬币胜率": ("输硬币胜率",),
+    "先攻次数":   ("先攻次数",),
+    "后攻次数":   ("后攻次数",),
+    "先攻胜":     ("先攻胜",),
+    "后攻胜":     ("后攻胜",),
+    "先攻胜率":   ("先攻胜率",),
+    "后攻胜率":   ("后攻胜率",),
+}
+
+_DEFAULT_ROWS = ("卡组", "对局数", "胜/负", "赢/输硬币",
+                 "赢硬币概率", "赢硬币胜率", "输硬币胜率", "综合胜率")
 
 
 class FloatingWindow(QWidget):
-    """对局统计悬浮窗，8 行 × 2 列表格布局。"""
+    """对局统计悬浮窗，动态行数 + 纯色/图片背景。"""
 
     _DEFAULT_W = 250
     _DEFAULT_H = 330
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None,
+                 rows: list[str] | None = None) -> None:
         super().__init__(parent)
         self._dragging = False
         self._drag_start = QPoint()
         self._bg_color = QColor(152, 212, 187, 128)
+        self._bg_pixmap: QPixmap | None = None
         self._text_color = "#000000"
         self._font_size = 20
         self._font_family = ""
+        self._rows: tuple[str, ...] = tuple(rows) if rows else _DEFAULT_ROWS
 
         self.setWindowFlags(
-            Qt.WindowType.Window              # 独立顶层窗口，不跟随父窗口最小化
+            Qt.WindowType.Window
             | Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setFixedSize(self._DEFAULT_W, self._DEFAULT_H)
+        self.setFixedSize(self._DEFAULT_W,
+                          40 + len(self._rows) * 26)
 
         self._grid = QGridLayout(self)
         self._grid.setContentsMargins(20, 20, 20, 20)
         self._grid.setHorizontalSpacing(16)
         self._grid.setVerticalSpacing(6)
 
-        rows = ("卡组", "对局数", "胜 / 负", "赢 / 输硬币", "赢币概率",
-                "赢币胜率", "输币胜率", "综合胜率")
         self._labels: list[QLabel] = []
         self._values: list[QLabel] = []
-        for r, text in enumerate(rows):
+        for r, text in enumerate(self._rows):
             lbl = QLabel(text)
             lbl.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             self._grid.addWidget(lbl, r, 0)
@@ -51,14 +78,39 @@ class FloatingWindow(QWidget):
 
         self._apply_style()
 
+    # ------------------------------------------------------------------
+    # 绘制
+    # ------------------------------------------------------------------
+
     def paintEvent(self, event) -> None:
-        """手绘圆角半透明背景。"""
+        """手绘圆角背景：纯色打底 + 可选图片叠加。"""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         path = QPainterPath()
-        path.addRoundedRect(8, 8, self.width() - 16, self.height() - 16, 10, 10)
+        margin = 8
+        path.addRoundedRect(margin, margin,
+                            self.width() - margin * 2,
+                            self.height() - margin * 2, 10, 10)
+
+        # 先涂纯色打底
         painter.fillPath(path, self._bg_color)
+
+        if self._bg_pixmap is not None:
+            # 有背景图：在圆角区域上叠加图片
+            painter.setClipPath(path)
+            scaled = self._bg_pixmap.scaled(
+                self.size(),
+                Qt.AspectRatioMode.IgnoreAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            painter.drawPixmap(0, 0, scaled)
+            painter.setClipping(False)
+
         painter.end()
+
+    # ------------------------------------------------------------------
+    # 样式
+    # ------------------------------------------------------------------
 
     def _style_sheet(self) -> str:
         css = (
@@ -76,14 +128,19 @@ class FloatingWindow(QWidget):
         for val in self._values:
             val.setStyleSheet(ss)
 
-    def update_style(self, cfg: dict) -> None:
-        """按 config.toml [floating_window] 段更新外观。"""
+    def update_style(self, cfg: dict,
+                     float_bg_path: str | None = None) -> None:
+        """按 config.toml [floating_window] 段更新外观。
+
+        float_bg_path: theme.toml float_bg 图片绝对路径（可选）。
+                       图片不存在或为空时回退纯色。
+        """
         w = cfg.get("width", self._DEFAULT_W)
-        h = cfg.get("height", self._DEFAULT_H)
-        self.setFixedSize(w, h)
+        h = cfg.get("height", 40 + len(self._rows) * 26)
+        self.setFixedSize(w, max(h, 40 + len(self._rows) * 26))
 
         bg = cfg.get("bg_color", "#98d4bb")
-        opacity_pct = cfg.get("opacity", 50)  # 0-100
+        opacity_pct = cfg.get("opacity", 50)
         self._font_size = cfg.get("font_size", 14)
         self._text_color = cfg.get("text_color", "#000000")
         self._font_family = cfg.get("font_family", "")
@@ -91,30 +148,81 @@ class FloatingWindow(QWidget):
         r, g, b = int(bg[1:3], 16), int(bg[3:5], 16), int(bg[5:7], 16)
         alpha = int(opacity_pct / 100 * 255)
         self._bg_color = QColor(r, g, b, alpha)
+
+        # 背景图处理
+        if float_bg_path:
+            pm = QPixmap(float_bg_path)
+            self._bg_pixmap = pm if not pm.isNull() else None
+        else:
+            self._bg_pixmap = None
+
         self._apply_style()
         self.update()
 
+    # ------------------------------------------------------------------
+    # 行管理
+    # ------------------------------------------------------------------
+
+    def set_rows(self, rows: list[str]) -> None:
+        """动态替换显示行，清空旧标签后重建。"""
+        new_rows = tuple(rows) if rows else _DEFAULT_ROWS
+        if new_rows == self._rows:
+            return
+        self._rows = new_rows
+
+        for lbl in self._labels + self._values:
+            self._grid.removeWidget(lbl)
+            lbl.deleteLater()
+        self._labels.clear()
+        self._values.clear()
+
+        for r, text in enumerate(self._rows):
+            lbl = QLabel(text)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            self._grid.addWidget(lbl, r, 0)
+            self._labels.append(lbl)
+
+            val = QLabel("-")
+            val.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            self._grid.addWidget(val, r, 1)
+            self._values.append(val)
+
+        self._apply_style()
+        h = 40 + len(self._rows) * 26
+        self.setFixedSize(self.width(), h)
+
+    # ------------------------------------------------------------------
+    # 内容刷新
+    # ------------------------------------------------------------------
+
     def update_content(self, deck_name: str, stats: dict | None) -> None:
-        """刷新悬浮窗 8 行 × 2 列数据。"""
+        """用统计数据和卡组名刷新悬浮窗内容。"""
         if stats is None:
             for v in self._values:
                 v.setText("-")
             return
 
-        self._values[0].setText(deck_name or "(未指定)")
-        self._values[1].setText(str(stats.get("对局数", 0)))
-        self._values[2].setText(
-            f"{stats.get('胜', 0)} / {stats.get('负', 0)}"
-        )
-        self._values[3].setText(
-            f"{stats.get('赢硬币次数', 0)} / {stats.get('输硬币次数', 0)}"
-        )
-        self._values[4].setText(str(stats.get("赢硬币概率", "-")))
-        self._values[5].setText(str(stats.get("赢硬币胜率", "-")))
-        self._values[6].setText(str(stats.get("输硬币胜率", "-")))
-        self._values[7].setText(str(stats.get("胜率", "-")))
+        for i, row_name in enumerate(self._rows):
+            keys = _ROW_KEY_MAP.get(row_name)
+            if keys is None:
+                self._values[i].setText("-")
+                continue
 
-    # ---- 拖拽 ----
+            if len(keys) == 1:
+                key = keys[0]
+                if key == "卡组":
+                    self._values[i].setText(deck_name or "(未指定)")
+                else:
+                    self._values[i].setText(str(stats.get(key, "-")))
+            else:
+                v1 = stats.get(keys[0], 0)
+                v2 = stats.get(keys[1], 0)
+                self._values[i].setText(f"{v1} / {v2}")
+
+    # ------------------------------------------------------------------
+    # 拖拽
+    # ------------------------------------------------------------------
+
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
             self._dragging = True

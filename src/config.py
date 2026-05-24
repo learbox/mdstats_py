@@ -24,6 +24,11 @@
     [recorder]
     daily_files = false           # 是否按日期分文件存储 CSV
 
+    [clipboard]
+    vertical_layout = false       # 竖排模式: true=key\\tvalue，false=横排 TSV
+    scope = "all"                 # 复制范围: "current"=当前卡组, "all"=全部
+    columns = []                  # 要复制的列名列表（空=全部 16 列）
+
     [floating_window]
     width = 250                   # 悬浮窗宽度（像素）
     height = 300                  # 悬浮窗高度（像素）
@@ -32,6 +37,7 @@
     font_size = 20                # 悬浮窗文字字号（像素）
     text_color = "#000000"        # 悬浮窗文字颜色
     font_family = "Microsoft YaHei"  # 悬浮窗字体（空则用全局字体）
+    rows = []                     # 悬浮窗数据行（空=默认 8 行）
 
 ================================================================================
 TOML 解析
@@ -80,11 +86,15 @@ def load_config() -> dict[str, Any]:
             "appearance": {"theme": "macaron"},
             "opponent_decks": {"presets": ["炎兽", "闪刀姬", "烙印", "白银城"]},
             "recorder": {"daily_files": False},
+            "clipboard": {
+                "vertical_layout": False, "scope": "all", "columns": [],
+            },
             "floating_window": {
                 "width": 250, "height": 300,
                 "bg_color": "#BDEF0A", "opacity": 50,
                 "font_size": 20, "text_color": "#000000",
                 "font_family": "Microsoft YaHei",
+                "rows": [],
             },
         }
 
