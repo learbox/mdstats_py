@@ -39,7 +39,7 @@ from src.config import get_project_root
 # 程序元数据 — 修改版本号、作者等请改这里
 # =============================================================================
 
-VERSION = "1.5.0"       # 当前版本号，发版前更新
+VERSION = "1.5.1"       # 当前版本号，发版前更新
 AUTHOR = "learbox"       # 作者名
 LICENSE = "MIT"          # 开源协议
 REPO_URL = "https://github.com/learbox/mdstats_py"  # 项目仓库，留空则不显示链接
@@ -117,7 +117,7 @@ class AboutDialog(QDialog):
         self.setFixedSize(420, 320)        # 固定大小，不需要 resize
         self.setObjectName("aboutDialog")
         r, g, b = int(widget_bg[1:3], 16), int(widget_bg[3:5], 16), int(widget_bg[5:7], 16)
-        self.setStyleSheet(f"#aboutDialog {{ background: rgba({r},{g},{b},230); }}")
+        self.setStyleSheet(f"#aboutDialog {{ background: rgba({r},{g},{b},128); }}")
         self._apply_dwm()
 
         # ---- 整体布局 ----
@@ -175,7 +175,7 @@ class AboutDialog(QDialog):
         content.setText("".join(lines))
         content.setStyleSheet(
             "padding: 16px; font-size: 13px;"
-            f"background: rgba({r},{g},{b},180);"  # 跟随主题背景色 + 30% 透明
+            f"background: rgba({r},{g},{b},128);"  # 跟随主题背景色 + 40% 透明
             "color: palette(text);"
         )
         outer.addWidget(content, 1)  # stretch=1，占据剩余空间
