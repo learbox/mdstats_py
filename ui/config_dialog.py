@@ -352,6 +352,24 @@ class ConfigDialog(QDialog):
         fl.addWidget(self._font_preview)
         lo.addWidget(g_font)
 
+        # ---- 字体选择器 ----
+        fr = QHBoxLayout()
+        fr.addWidget(QLabel("更换字体:"))
+        self._font_picker = QFontComboBox()
+        self._font_picker.setToolTip(
+            "选择新字体后点击 [应用] 将其写入主题文件。\n"
+            "只替换字体栈的第一个字体，后面的回退字体保留不变。\n"
+            "修改后会自动重载主题。"
+        )
+        fr.addWidget(self._font_picker)
+        btn_apply_font = QPushButton("应用")
+        btn_apply_font.setFixedWidth(60)
+        btn_apply_font.clicked.connect(self._on_apply_font)
+        btn_apply_font.setToolTip("将选中的字体写入当前主题的 font_family。")
+        fr.addWidget(btn_apply_font)
+        fr.addStretch()
+        lo.addLayout(fr)
+
         # ---- 窗口尺寸 ----
         r2 = QHBoxLayout()
         r2.addWidget(QLabel("窗口宽度:"))
@@ -433,8 +451,62 @@ class ConfigDialog(QDialog):
 
         # 预览实际渲染字体
         actual_font = QFont(fonts_in_stack[0] if fonts_in_stack else "")
-        # 如果第一个字体不可用，用 QFont 默认行为（Qt 自动回退）
         self._font_preview.setFont(actual_font)
+        # 字体选择器同步主力字体
+        if fonts_in_stack and fonts_in_stack[0] in available:
+            idx = self._font_picker.findText(fonts_in_stack[0])
+            if idx >= 0:
+                self._font_picker.setCurrentIndex(idx)
+
+    def _on_apply_font(self) -> None:
+        """把字体选择器中选中的字体写入当前主题的 font_family 首位。"""
+        import tomllib, sys, re
+        if sys.version_info < (3, 11):
+            import tomli as tomllib
+
+        theme_name = self._theme_combo.currentText()
+        if not theme_name or theme_name == _BUILTIN_THEME:
+            return
+
+        toml_path = get_project_root() / "themes" / theme_name / "theme.toml"
+        if not toml_path.exists():
+            return
+
+        new_font = self._font_picker.currentText()
+        if not new_font:
+            return
+
+        # 读取原主题文件内容
+        try:
+            with open(toml_path, "rb") as f:
+                data = tomllib.load(f)
+        except Exception:
+            return
+
+        assets = data.get("assets", {})
+        old_stack = assets.get("font_family", "")
+        # 把新字体放到栈顶，保留原来除第一个以外的其他字体
+        if old_stack:
+            # 清理掉原有的第一个字体（可能含引号），把新字体塞到栈顶
+            fonts = [f.strip().strip('"') for f in old_stack.split(",")]
+            rest = fonts[1:] if len(fonts) > 1 else []
+            # 去重
+            rest = [f for f in rest if f != new_font]
+            new_stack = ", ".join(f'"{f}"' for f in [new_font] + rest)
+        else:
+            new_stack = f'"{new_font}"'
+
+        # 写回 — 简单替换 font_family 行
+        text = toml_path.read_text(encoding="utf-8")
+        lines = text.split("\n")
+        for i, line in enumerate(lines):
+            if line.strip().startswith("font_family"):
+                indent = line[:len(line) - len(line.lstrip())]
+                lines[i] = f"{indent}font_family = {new_stack}"
+                break
+        toml_path.write_text("\n".join(lines), encoding="utf-8")
+
+        self._update_font_display()
 
     # =========================================================================
     # Tab 3: 剪贴板
