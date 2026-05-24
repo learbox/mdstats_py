@@ -112,7 +112,7 @@ from PySide6.QtGui import QFontDatabase
 _THEMES_DIR = get_project_root() / "themes"
 
 # 全局默认字体（当主题未指定字体时的兜底）
-_DEFAULT_FONT = "Microsoft YaHei"
+_DEFAULT_FONT = "Microsoft YaHei, -apple-system, sans-serif"
 
 
 # =============================================================================

@@ -1,31 +1,41 @@
-"""macOS 窗口定位与截图 — 基于 Quartz (CoreGraphics) + mss。
+"""macOS 窗口定位与截图 — 基于 Quartz (CoreGraphics) / AppKit + mss。
 
 ================================================================================
 技术栈
 
-Quartz (pyobjc-framework-Quartz) — macOS 的窗口管理框架
-    CGWindowListCopyWindowInfo — 枚举所有窗口
-    kCGWindowName / kCGWindowOwnerName — 窗口标题和所属程序名
+Quartz  (pyobjc-framework-Quartz) — macOS CoreGraphics 窗口管理
+AppKit  (pyobjc-framework-AppKit) — macOS 原生窗口信息（Retina 缩放）
 
 mss — 高性能截图（macOS 底层走 CoreGraphics，GPU 加速）
 
 ================================================================================
-坐标系警告
+坐标系
 
-macOS 的 CoreGraphics 坐标系原点在屏幕左下角，而 Windows 在左上角。
-mss 库的 region 参数使用左上角为原点的坐标系，所以需要转换：
-    mac_y = screen_height - window_top - window_height
+macOS CoreGraphics 原点在屏幕左下角，mss 原点在左上角。
+需要翻转 Y 轴：mss_top = screen_height - mac_y - height
+
+================================================================================
+Retina 屏
+
+CGWindowBounds 返回的是逻辑像素（points），在 Retina 屏上需要乘以
+backingScaleFactor（2x 或 3x）才能得到物理像素给 mss。
+
+================================================================================
+全屏游戏
+
+macOS 全屏游戏会进入独立 Space。CGWindowListCopyWindowInfo 可能找不到。
+建议使用无边框窗口模式而非全屏模式。如果必须全屏，可尝试 CGDisplayStream API。
 
 ================================================================================
 权限要求
 
-macOS 要求用户在"系统设置 → 隐私与安全性 → 屏幕录制"中授权终端
-或 Python 程序，否则 CGWindowListCopyWindowInfo 和截图都会失败。
+需要用户在「系统设置 → 隐私与安全性 → 屏幕录制」中授权。
 """
 
 import numpy as np
 import mss
 import Quartz
+from AppKit import NSScreen
 
 
 # =============================================================================
@@ -76,31 +86,47 @@ def _find_window_info(title_substring: str) -> dict | None:
 def _get_screen_region(window_info: dict) -> list[int]:
     """把 CGWindowBounds 转成 mss 兼容的 [left, top, width, height] 区域。
 
-    macOS 的 CGWindowBounds 用左下角为原点的 Y 坐标。
-    mss 需要左上角为原点的坐标。所以要做 Y 轴翻转：
-        mss_top = screen_height - mac_y - height
-
-    参数:
-        window_info: CGWindowListCopyWindowInfo 返回的窗口字典
+    处理三个关键问题：
+        1. Y 轴翻转：macOS 原点在左下，mss 原点在左上
+        2. 多显示器：找到窗口所在显示器，用该显示器的高度翻转
+        3. Retina：CGWindowBounds 是逻辑像素 (points)，mss 需要物理像素
 
     返回:
-        [left, top, width, height] — mss 兼容的截图区域（像素）
+        [left, top, width, height] — mss 兼容的截图区域（物理像素）
     """
     bounds = window_info.get(Quartz.kCGWindowBounds, {})
-    x = int(bounds.get("X", 0))
-    y = int(bounds.get("Y", 0))      # macOS 坐标：左下角为原点
-    w = int(bounds.get("Width", 0))
-    h = int(bounds.get("Height", 0))
+    x = bounds.get("X", 0)
+    y = bounds.get("Y", 0)           # macOS 坐标：左下角到屏幕底部
+    w = bounds.get("Width", 0)
+    h = bounds.get("Height", 0)
 
-    # 获取主屏幕高度用于坐标翻转
-    main_display = Quartz.CGDisplayBounds(Quartz.CGMainDisplayID())
-    screen_h = int(main_display.size.height)
+    # ---- 找到窗口所在的 NSScreen（处理多显示器） ----
+    # 用窗口中心点匹配屏幕
+    window_cx = x + w / 2
+    window_cy = y + h / 2
+    target_screen = None
+    for screen in NSScreen.screens():
+        frame = screen.frame()       # CGRect 在下角原点
+        visible = screen.visibleFrame()
+        sx, sy = frame.origin.x, frame.origin.y
+        sw, sh = frame.size.width, frame.size.height
+        if sx <= window_cx <= sx + sw and sy <= window_cy <= sy + sh:
+            target_screen = screen
+            break
+    if target_screen is None:
+        target_screen = NSScreen.mainScreen()  # 兜底：主屏
 
-    # macOS 的 Y 坐标是窗口左下角到屏幕底部的距离
-    # mss 需要窗口左上角到屏幕顶部的距离
-    mss_top = screen_h - y - h if y + h <= screen_h else 0
+    screen_h = target_screen.frame().size.height
+    scale = target_screen.backingScaleFactor()  # Retina 缩放：1x/2x/3x
 
-    return [x, mss_top, w, h]
+    # ---- Y 轴翻转 ----
+    # mac_y 是窗口左下角到屏幕底边距离
+    # mss_top = 屏幕顶部到窗口顶部的距离
+    mss_top = screen_h - y - h
+
+    # ---- points → 物理像素 ----
+    return [int(x * scale), int(mss_top * scale),
+            int(w * scale), int(h * scale)]
 
 
 # =============================================================================

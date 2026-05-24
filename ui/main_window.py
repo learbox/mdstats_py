@@ -1506,11 +1506,14 @@ class MainWindow(QMainWindow):
     def _open_csv_dir() -> None:
         """在文件资源管理器中打开活跃 CSV 文件所在的目录。
 
-        跨平台: Windows 用 os.startfile()，Linux/macOS 用 xdg-open。
+        Windows/macOS/Linux 分别用对应命令打开。
         """
         csv_dir = str(get_active_csv_path().parent.resolve())
         try:
-            if os.name == "nt":
+            import sys
+            if sys.platform == "darwin":
+                subprocess.Popen(["open", csv_dir])
+            elif os.name == "nt":
                 os.startfile(csv_dir)
             else:
                 subprocess.Popen(["xdg-open", csv_dir])
