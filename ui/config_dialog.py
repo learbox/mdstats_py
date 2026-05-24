@@ -256,6 +256,12 @@ class ConfigDialog(QDialog):
         self.setMinimumSize(660, 540)
         self.resize(680, 560)
         self.setObjectName("configDialog")
+        self.setStyleSheet(
+            "#configDialog { background: palette(window); }"
+            "QGroupBox { background: transparent; border: 1px solid palette(mid);"
+            "  border-radius: 6px; margin-top: 8px; padding-top: 16px; }"
+            "QGroupBox::title { subcontrol-origin: margin; left: 12px; }"
+        )
         self._apply_dwm_round_corners()
 
         outer = QVBoxLayout(self)
@@ -264,16 +270,11 @@ class ConfigDialog(QDialog):
         outer.addWidget(self._make_titlebar())
 
         self._tabs = QTabWidget()
-        # 标签页 50% 半透明白底，透出背景图但保持可读性
+        # 标签页背景跟随系统调色板（亮/暗主题自动适配）
         self._tabs.setStyleSheet(
-            "QTabWidget::pane { background: rgba(255,255,255,180); border: none; }"
+            "QTabWidget::pane { background: palette(window); border: none; }"
             "QTabBar::tab { background: transparent; padding: 6px 16px; }"
-            "QTabBar::tab:selected { background: rgba(255,255,255,210); }"
-        )
-        self.setStyleSheet(
-            "QGroupBox { background: transparent; border: 1px solid rgba(128,128,128,80);"
-            "  border-radius: 6px; margin-top: 8px; padding-top: 16px; }"
-            "QGroupBox::title { subcontrol-origin: margin; left: 12px; }"
+            "QTabBar::tab:selected { background: palette(base); }"
         )
         self._tabs.addTab(self._make_detection_tab(), "识别")
         self._tabs.addTab(self._make_appearance_tab(), "外观")

@@ -115,6 +115,7 @@ class AboutDialog(QDialog):
         )
         self.setFixedSize(420, 320)        # 固定大小，不需要 resize
         self.setObjectName("aboutDialog")  # QSS 可通过 #aboutDialog 选择器定位
+        self.setStyleSheet("#aboutDialog { background: palette(window); }")
         self._apply_dwm()                  # Win11 原生圆角
 
         # ---- 整体布局 ----
@@ -171,8 +172,9 @@ class AboutDialog(QDialog):
             lines.append(f"<p><b>特别鸣谢</b><br>{ack}</p>")
         content.setText("".join(lines))
         content.setStyleSheet(
-            "padding: 16px; font-size: 13px; background: transparent;"
-            "color: palette(text);"              # 跟随系统/主题文字颜色
+            "padding: 16px; font-size: 13px;"
+            "background: palette(window);"       # 跟随主题窗口背景色
+            "color: palette(text);"              # 跟随主题文字颜色
         )
         outer.addWidget(content, 1)  # stretch=1，占据剩余空间
 
