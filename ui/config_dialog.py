@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, QPoint, QTranslator, QLibraryInfo, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QFont, QFontDatabase
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QColorDialog, QComboBox, QDialog,
     QDoubleSpinBox, QFontComboBox, QGroupBox, QHBoxLayout, QLabel,
@@ -274,6 +274,10 @@ class ConfigDialog(QDialog):
         self._interval.setRange(0.1, 10.0)
         self._interval.setSingleStep(0.1)
         self._interval.setSuffix(" 秒")
+        self._interval.setToolTip("每隔多久截取一次游戏画面进行识别。\n"
+                                   "0.3 秒 = 每秒约 3 次截图，灵敏但 CPU 占用高。\n"
+                                   "1.0 秒 = 每秒 1 次截图，省 CPU 但可能漏掉快速闪过的 UI。\n"
+                                   "推荐 0.3 ~ 1.0 秒。")
         r.addWidget(self._interval)
         r.addStretch()
         lo.addLayout(r)
@@ -284,13 +288,15 @@ class ConfigDialog(QDialog):
         self._threshold.setRange(0.0, 1.0)
         self._threshold.setSingleStep(0.05)
         self._threshold.setDecimals(2)
+        self._threshold.setToolTip("模板匹配置信度阈值 (0~1)。\n"
+                                    "0.80 = 匹配度需达 80% 才判定识别成功。\n"
+                                    "太高 → 可能频繁漏掉本该识别到的画面。\n"
+                                    "太低 → 可能把无关画面误判为匹配。\n"
+                                    "推荐 0.75 ~ 0.90。")
         r2.addWidget(self._threshold)
         r2.addStretch()
         lo.addLayout(r2)
 
-        tip = QLabel("阈值越高越不容易误识别，但可能漏识别。推荐 0.75 ~ 0.90")
-        tip.setStyleSheet("color: #888; font-size: 11px; background: transparent;")
-        lo.addWidget(tip)
         lo.addStretch()
         return w
 
@@ -303,9 +309,11 @@ class ConfigDialog(QDialog):
         lo = QVBoxLayout(w)
         lo.setSpacing(12)
 
+        # ---- 主题 ----
         r = QHBoxLayout()
         r.addWidget(QLabel("主题:"))
         self._theme_combo = QComboBox()
+        self._theme_combo.setToolTip("切换界面配色和字体。\n主题文件在 themes/ 文件夹下。")
         themes_dir = get_project_root() / "themes"
         names = []
         if themes_dir.is_dir():
@@ -318,14 +326,39 @@ class ConfigDialog(QDialog):
             self._theme_combo.addItem(_BUILTIN_THEME)
             self._theme_combo.setEnabled(False)
         r.addWidget(self._theme_combo)
+        self._theme_combo.currentIndexChanged.connect(self._update_font_display)
         r.addStretch()
         lo.addLayout(r)
 
+        # ---- 字体栈 ----
+        g_font = QGroupBox("当前主题的字体")
+        g_font.setToolTip(
+            "字体栈是多个字体组成的优先级列表。\n"
+            "Qt 从第一个开始尝试，如果系统没装就试下一个，直到找到可用的。\n"
+            "因此同一个主题在 Windows 和 macOS 上可能显示不同字体——这是正常行为。"
+        )
+        fl = QVBoxLayout(g_font)
+        self._font_stack_label = QLabel()
+        self._font_stack_label.setStyleSheet("font-size: 12px; background: transparent;")
+        self._font_stack_label.setWordWrap(True)
+        fl.addWidget(self._font_stack_label)
+
+        # 字体预览
+        self._font_preview = QLabel("字体预览 ABC 123 中文示例 勝負 先攻 後攻")
+        self._font_preview.setStyleSheet(
+            "font-size: 16px; padding: 8px; background: transparent;"
+            "border: 1px dashed #888; border-radius: 4px;"
+        )
+        fl.addWidget(self._font_preview)
+        lo.addWidget(g_font)
+
+        # ---- 窗口尺寸 ----
         r2 = QHBoxLayout()
         r2.addWidget(QLabel("窗口宽度:"))
         self._win_width = QSpinBox()
         self._win_width.setRange(400, 5000)
         self._win_width.setSuffix(" px")
+        self._win_width.setToolTip("主窗口的宽度，修改后下次启动生效。")
         r2.addWidget(self._win_width)
         r2.addStretch()
         lo.addLayout(r2)
@@ -339,14 +372,69 @@ class ConfigDialog(QDialog):
         r3.addStretch()
         lo.addLayout(r3)
 
+        # ---- 悬浮窗背景开关 ----
         r4 = QHBoxLayout()
-        self._use_theme_bg = QCheckBox("悬浮窗使用主题背景图（不勾=始终纯色）")
+        self._use_theme_bg = QCheckBox("悬浮窗使用主题背景图")
+        self._use_theme_bg.setToolTip(
+            "勾选后优先使用主题文件夹中的 float_bg 图片。\n"
+            "图片不存在时自动回退到下方 [悬浮窗] 标签页设置的纯色。\n"
+            "不勾选则始终使用纯色（适合 OBS 颜色键捕捉绿幕）。"
+        )
         r4.addWidget(self._use_theme_bg)
         r4.addStretch()
         lo.addLayout(r4)
 
         lo.addStretch()
+        self._update_font_display()
         return w
+
+    def _update_font_display(self) -> None:
+        """读取当前主题的 font_family 并显示字体栈可用性。"""
+        import tomllib, sys
+        if sys.version_info < (3, 11):
+            import tomli as tomllib
+
+        theme_name = self._theme_combo.currentText()
+        if not theme_name or theme_name == _BUILTIN_THEME:
+            self._font_stack_label.setText("(内置主题，使用系统默认字体)")
+            return
+
+        toml_path = get_project_root() / "themes" / theme_name / "theme.toml"
+        if not toml_path.exists():
+            return
+        try:
+            with open(toml_path, "rb") as f:
+                data = tomllib.load(f)
+        except Exception:
+            return
+        assets = data.get("assets", {})
+        font_family = assets.get("font_family", "")
+        if not font_family:
+            self._font_stack_label.setText("(未指定字体栈，使用系统默认)")
+            return
+
+        # 按逗号拆分字体栈，去掉引号
+        import re
+        fonts_in_stack = [
+            f.strip().strip('"')
+            for f in font_family.split(",")
+        ]
+        available = QFontDatabase().families()
+
+        lines = ["字体栈（从高到低优先级）："]
+        for f in fonts_in_stack:
+            ok = f in available
+            mark = "✓" if ok else "✗"
+            color = "green" if ok else "gray"
+            lines.append(
+                f'  <span style="color:{color}">{mark} {f}</span>'
+            )
+        self._font_stack_label.setText("<br>".join(lines))
+
+        # 预览实际渲染字体
+        actual_font = QFont(fonts_in_stack[0] if fonts_in_stack else "")
+        # 如果第一个字体不可用，用 QFont 默认行为（Qt 自动回退）
+        self._font_preview.setFont(actual_font)
 
     # =========================================================================
     # Tab 3: 剪贴板
