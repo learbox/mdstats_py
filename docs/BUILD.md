@@ -98,6 +98,8 @@ git push origin vX.Y.Z
 
 CI 工作流文件：`.github/workflows/release.yml`。推送 tag 后到 `https://github.com/learbox/mdstats_py/actions` 查看进度。完成后在 Releases 页面出现草稿，检查 ZIP 内容无误后手动点击 Publish release 发布。
 
+**手动测试构建**（不打 tag）：去 Actions 页面 → Release → Run workflow → 选分支 → 运行。构建完成后 ZIP 出现在运行记录的 Artifacts 区域，可直接下载。
+
 如果 CI 未触发（如网络问题），改为手动本地打包上传。
 
 ## 发布包结构
