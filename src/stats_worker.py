@@ -178,27 +178,25 @@ class StatsWorker(QThread):
         self.msleep(int(self._interval * 1000))
 
     def _handle_pause(self, paused: bool) -> bool:
-        """处理"窗口不可用"的暂停状态。
+        """处理"窗口不可用"的暂停状态。窗口已关闭时设置 _running = False。
 
         在主循环中，有两种情况会导致暂停：
             1. 窗口最小化 → 不需要截图，因为看不到内容
             2. 分辨率变化导致模板重载 → 暂时无法识别
-
-        暂停期间：
-            - 发一次状态消息（只发一次，避免刷屏）
-            - 休眠 interval 秒后重试
-            - 返回 True 表示当前处于暂停状态
-
-        注意：minimized 状态是 Master Duel 窗口特有的概念——
-        全屏游戏在切换桌面时，GetClientRect 会返回 (0, 0)。
+            3. 窗口已关闭 → 停止工作线程
         """
+        # 窗口已关闭（不是最小化）→ 停止线程
+        if not _cap.is_window_open("masterduel"):
+            self._running = False
+            self.status_update.emit("程序已关闭 — Master Duel 窗口未找到")
+            return paused
+
         if not paused:
-            # 首次进入暂停：发一次状态消息
             paused = True
             if _cap.is_window_minimized("masterduel"):
                 self.status_update.emit("窗口已最小化 — 等待恢复…")
-        self._skip()         # 休眠等待
-        return paused        # 返回暂停标志
+        self._skip()
+        return paused
 
     def _ensure_templates(self, last_size: tuple[int, int] | None) -> tuple[int, int] | None:
         """检测 Master Duel 窗口分辨率是否变化，变化时刷新模板缓存。
