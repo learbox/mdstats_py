@@ -554,9 +554,7 @@ class ConfigDialog(QDialog):
             只替换第一个意味着：如果用户选的字体在他的系统上存在，就用新字体；
             如果不存在（比如换到另一台电脑），自动回退到原来的栈中字体。
         """
-        import tomllib, sys, re
-        if sys.version_info < (3, 11):
-            import tomli as tomllib
+        import tomllib
 
         theme_name = self._theme_combo.currentText()
         if not theme_name or theme_name == _BUILTIN_THEME:
@@ -893,7 +891,6 @@ class ConfigDialog(QDialog):
         self.config_saved.emit()
         self.accept()
 
-    @staticmethod
     @staticmethod
     def _write_toml(data: dict) -> None:
         """把配置字典写成带注释的 config.toml 文件。"""
