@@ -818,6 +818,9 @@ class MainWindow(QMainWindow):
         # ---- 22. 同步加载 CSV 数据（在 __init__ 末尾直接调用，确保列宽恢复先于 show） ----
         self._reload_tables()
 
+        # ---- 23. 延迟检查新版本（3 秒后静默检查） ----
+        QTimer.singleShot(3000, self._check_update)
+
     # =========================================================================
     # 底部按钮状态管理
     #
@@ -1405,6 +1408,29 @@ class MainWindow(QMainWindow):
                 found = s
                 break
         self._float_window.update_content(deck_name, found)
+
+    # =========================================================================
+    # 版本更新检查
+    # =========================================================================
+
+    def _check_update(self) -> None:
+        """从 GitHub API 获取最新 release tag，与当前版本比较。
+
+        启动 3 秒后调用，网络问题或 API 限制时静默跳过。
+        """
+        try:
+            import urllib.request, json
+            url = "https://api.github.com/repos/learbox/mdstats_py/releases/latest"
+            req = urllib.request.Request(url)
+            req.add_header("Accept", "application/vnd.github+json")
+            req.add_header("User-Agent", "MDStats")
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read())
+            latest = data.get("tag_name", "").lstrip("v")
+            if latest and latest != VERSION:
+                self._show_status(f"有新版本 v{latest}，请前往 GitHub 下载")
+        except Exception:
+            pass  # 网络不通或 API 限制时静默跳过
 
     # =========================================================================
     # 关于对话框
