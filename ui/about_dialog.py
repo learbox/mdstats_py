@@ -222,21 +222,15 @@ class AboutDialog(QDialog):
         outer.addWidget(bw)
 
     def _do_check_update(self) -> None:
-        """向 GitHub API 查询最新 Release 版本号，和当前 VERSION 比较。
+        """查询 GitHub Releases API 是否有比当前更新的版本。
 
-        流程：
-            1. 请求 api.github.com/repos/learbox/mdstats_py/releases/latest
-            2. 从返回 JSON 中取 tag_name（如 "v1.5.2"）→ 去掉前缀 v
-            3. 比较 latest 和 VERSION 常量
-            4. 结果显示在左下角 update_label 上
-
-        为什么用 urllib 而不是 requests？
-            urllib 是 Python 自带标准库，零依赖。requests 需要额外安装。
+        用 urllib（Python 标准库）而非 requests（需额外安装）。
+        调用 _compare_versions() 按三段式数字比较，不会把本地新版误判为旧版。
 
         错误处理：
-            URLError / timeout    — 网络不通 → "网络连接失败"
-            HTTPError (403/404)   — API 限制或仓库不可达
-            其他异常              — "检查失败"
+            — URLError / timeout → "网络连接失败"
+            — HTTPError (403/404) → "检查失败（状态码）"
+            — 其他异常           → "检查失败"
         """
         self._update_label.setText("正在检查…")
         try:
