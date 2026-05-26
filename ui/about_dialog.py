@@ -56,35 +56,6 @@ ACKNOWLEDGMENTS = (      # 特别鸣谢，支持 HTML <a> 标签
 # AboutDialog — 关于弹窗
 # =============================================================================
 
-# =============================================================================
-# 版本比较工具 — 三段式数字比较，不会把 1.10 判成小于 1.9
-# =============================================================================
-
-def _compare_versions(a: str, b: str) -> int:
-    """比较两个三段式版本号（如 "1.5.2" vs "1.5.3"）。
-
-    返回：>0 表示 a 更新，<0 表示 b 更新，=0 相同。
-    不等长版本号（如 "2.0" vs "1.9.9"）自动补零再比较。
-    """
-    try:
-        pa = [int(x) for x in a.split(".")]
-        pb = [int(x) for x in b.split(".")]
-        while len(pa) < len(pb):
-            pa.append(0)
-        while len(pb) < len(pa):
-            pb.append(0)
-        for xa, xb in zip(pa, pb):
-            if xa != xb:
-                return xa - xb
-        return 0
-    except ValueError:
-        return 0  # 解析失败当相同，不误报
-
-
-# =============================================================================
-# AboutDialog
-# =============================================================================
-
 class AboutDialog(QDialog):
     """关于弹窗，无边框 + 自定义标题栏 + DWM 圆角。
 
@@ -257,9 +228,9 @@ class AboutDialog(QDialog):
                 data = json.loads(resp.read())
 
             latest = data.get("tag_name", "").lstrip("v")
-            if latest and _compare_versions(latest, VERSION) > 0:
+            if latest and self._compare_versions(latest, VERSION) > 0:
                 self._update_label.setText(f"新版本 v{latest} 已发布！")
-            elif latest and _compare_versions(latest, VERSION) < 0:
+            elif latest and self._compare_versions(latest, VERSION) < 0:
                 self._update_label.setText(f"已是最新版本（GitHub: v{latest}）")
             else:
                 self._update_label.setText("已是最新版本")
@@ -269,6 +240,27 @@ class AboutDialog(QDialog):
             self._update_label.setText(f"检查失败（{e.code}）")
         except Exception:
             self._update_label.setText("检查失败")
+
+    # ------------------------------------------------------------------
+    # 版本号数字比较 — 三段式逐位解析，不会把 1.10 误判成小于 1.9
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _compare_versions(a: str, b: str) -> int:
+        """比较两个版本号。返回 >0=更新，<0=更旧，0=相同。"""
+        try:
+            pa = [int(x) for x in a.split(".")]
+            pb = [int(x) for x in b.split(".")]
+            while len(pa) < len(pb):
+                pa.append(0)
+            while len(pb) < len(pa):
+                pb.append(0)
+            for xa, xb in zip(pa, pb):
+                if xa != xb:
+                    return xa - xb
+            return 0
+        except ValueError:
+            return 0
 
     # =========================================================================
     # DWM 圆角（Windows 11 原生效果）
