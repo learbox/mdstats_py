@@ -183,13 +183,40 @@ class AboutDialog(QDialog):
         # ---- 底部按钮 ----
         bw = QWidget()
         bwl = QHBoxLayout(bw)
+        self._update_label = QLabel("")
+        self._update_label.setStyleSheet(
+            "font-size: 12px; background: transparent; padding: 2px 8px;"
+        )
+        bwl.addWidget(self._update_label)
         bwl.addStretch()
+        btn_check = QPushButton("检查更新")
+        btn_check.clicked.connect(self._do_check_update)
+        bwl.addWidget(btn_check)
         bok = QPushButton("确定")
         bok.clicked.connect(self.accept)
-        bok.setDefault(True)  # 按 Enter 键默认触发
+        bok.setDefault(True)
         bwl.addWidget(bok)
         bwl.setContentsMargins(16, 0, 16, 12)
         outer.addWidget(bw)
+
+    def _do_check_update(self) -> None:
+        """向 GitHub API 查询最新版本号，和当前 VERSION 比较。"""
+        self._update_label.setText("正在检查…")
+        try:
+            import urllib.request, json
+            url = "https://api.github.com/repos/learbox/mdstats_py/releases/latest"
+            req = urllib.request.Request(url)
+            req.add_header("Accept", "application/vnd.github+json")
+            req.add_header("User-Agent", "MDStats")
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read())
+            latest = data.get("tag_name", "").lstrip("v")
+            if latest and latest != VERSION:
+                self._update_label.setText(f"新版本 v{latest} 已发布！")
+            else:
+                self._update_label.setText("已是最新版本")
+        except Exception:
+            self._update_label.setText("检查失败（网络不通）")
 
     # =========================================================================
     # DWM 圆角（Windows 11 原生效果）

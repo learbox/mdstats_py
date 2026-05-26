@@ -818,8 +818,6 @@ class MainWindow(QMainWindow):
         # ---- 22. 同步加载 CSV 数据（在 __init__ 末尾直接调用，确保列宽恢复先于 show） ----
         self._reload_tables()
 
-        # ---- 23. 延迟检查新版本（3 秒后静默检查） ----
-        QTimer.singleShot(3000, self._check_update)
 
     # =========================================================================
     # 底部按钮状态管理
@@ -1408,46 +1406,6 @@ class MainWindow(QMainWindow):
                 found = s
                 break
         self._float_window.update_content(deck_name, found)
-
-    # =========================================================================
-    # 版本更新检查
-    # =========================================================================
-
-    def _check_update(self) -> None:
-        """从 GitHub Releases API 获取最新版本号，与当前 VERSION 比较。
-
-        工作原理：
-            1. 请求 api.github.com/repos/learbox/mdstats_py/releases/latest
-            2. GitHub 返回最新 Release 的 JSON，其中 tag_name 即版本号（如 "1.5.2"）
-            3. 去掉 tag_name 前面的 "v" → 和本地的 VERSION 常量比
-            4. 不同则状态栏提示"有新版本 vX.Y.Z"
-
-        为什么用 urllib 不用 requests？
-            urllib 是 Python 自带标准库，无需安装任何第三方包。
-            请求量极小（启动一次），不需要 requests 的高级功能。
-
-        异常处理：
-            - 网络不通 → 静默跳过（用户离线也能正常使用程序）
-            - API 超限 → GitHub 公开仓库不限次数，但加了 timeout=5 秒以防万一
-            - JSON 解析失败 → 静默跳过
-        """
-        try:
-            import urllib.request, json
-
-            url = "https://api.github.com/repos/learbox/mdstats_py/releases/latest"
-            req = urllib.request.Request(url)
-            # GitHub API v3 要求设置 Accept 和 User-Agent 头
-            req.add_header("Accept", "application/vnd.github+json")
-            req.add_header("User-Agent", "MDStats")
-
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                data = json.loads(resp.read())
-
-            latest = data.get("tag_name", "").lstrip("v")
-            if latest and latest != VERSION:
-                self._show_status(f"有新版本 v{latest}，请前往 GitHub 下载")
-        except Exception:
-            pass  # 网络不通或 API 限制，静默跳过
 
     # =========================================================================
     # 关于对话框
