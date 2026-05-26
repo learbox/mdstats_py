@@ -35,6 +35,28 @@ from PySide6.QtWidgets import (
 
 from src.config import get_project_root
 
+
+def _compare_versions(a: str, b: str) -> int:
+    """比较两个三段式版本号（如 "1.5.2" vs "1.5.3"）。
+
+    返回：>0 表示 a 更新，<0 表示 b 更新，=0 相同。
+    处理不等长（如 "1.5" vs "1.5.2"）——缺失段当 0。
+    """
+    try:
+        pa = [int(x) for x in a.split(".")]
+        pb = [int(x) for x in b.split(".")]
+        # 补零到等长
+        while len(pa) < len(pb):
+            pa.append(0)
+        while len(pb) < len(pa):
+            pb.append(0)
+        for xa, xb in zip(pa, pb):
+            if xa != xb:
+                return xa - xb
+        return 0
+    except ValueError:
+        return 0  # 解析失败当相同，不误报
+
 # =============================================================================
 # 程序元数据 — 修改版本号、作者等请改这里
 # =============================================================================
@@ -230,10 +252,12 @@ class AboutDialog(QDialog):
                 data = json.loads(resp.read())
 
             latest = data.get("tag_name", "").lstrip("v")
-            if latest and latest != VERSION:
+            if latest and _compare_versions(latest, VERSION) > 0:
                 self._update_label.setText(f"新版本 v{latest} 已发布！")
+            elif latest and _compare_versions(latest, VERSION) < 0:
+                self._update_label.setText(f"已是最新版本（GitHub: v{latest}）")
             else:
-                self._update_label.setText(f"已是最新版本")
+                self._update_label.setText("已是最新版本")
         except (URLError, TimeoutError, OSError):
             self._update_label.setText("网络连接失败")
         except HTTPError as e:
