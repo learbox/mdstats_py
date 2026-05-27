@@ -16,14 +16,14 @@ git log --oneline   # 确认提交链完整
 
 ## 3. 更新版本号
 
-涉及 4 个文件：
+涉及 4 个文件，均用 grep 定位后修改：
 
-| 文件 | 位置 | 说明 |
-|------|------|------|
-| `ui/about_dialog.py` | 第 42 行 `VERSION = "X.Y.Z"` | 运行时版本号源 |
-| `pyproject.toml` | 第 3 行 `version = "X.Y.Z"` | 项目元数据 |
-| `uv.lock` | 第 7 行 `version = "X.Y.Z"` | 依赖锁文件 |
-| `docs/README_release.md` | 标题 `# MD Stats vX.Y.Z` | 发行包说明标题 |
+| 文件 | 搜索定位 | 修改为 |
+|------|---------|--------|
+| `ui/about_dialog.py` | `grep '^VERSION ='` | `VERSION = "X.Y.Z"` |
+| `pyproject.toml` | `grep '^version ='`（`[project]` 段下） | `version = "X.Y.Z"` |
+| `uv.lock` | `grep -A1 'name = "mdstats-py"'`，下一行 | `version = "X.Y.Z"` |
+| `docs/README_release.md` | 标题行 | `# MD Stats vX.Y.Z` |
 
 版本号规则：
 - 修复 bug → Z + 1（如 1.5.3 → 1.5.4）
