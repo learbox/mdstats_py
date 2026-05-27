@@ -1,12 +1,12 @@
 # MD Stats
 
-基于图像识别的 **Master Duel 对局自动统计工具**。通过 OpenCV 模板匹配自动检测硬币输赢、先后攻、对局胜负，记录到 CSV 并通过 GUI 展示统计数据。
+基于图像识别的 **Master Duel 对局自动统计工具**。通过 OpenCV 模板匹配自动检测硬币输赢（含段位升降）、先后攻、对局胜负，记录到 CSV 并通过 GUI 展示统计数据。
 
 ## 功能
 
 - **自动识别** — 定时截图 + OpenCV 模板匹配，自动检测对局的三阶段信息（硬币/先后攻/胜负），硬币阶段同时检测段位升降
 - **手动联动** — 手动按钮与自动识别状态同步，自动漏检时可手动补录，互不冲突
-- **统计表格** — 按卡组汇总对局数、胜率、硬币胜负率、先后攻胜率
+- **统计表格** — 按卡组汇总对局数、胜率、硬币胜负率、先后攻胜率、段位胜率，支持自定义显示列
 - **记录表格** — 每条对局的详细信息，支持倒序显示和单元格编辑（下拉菜单 + 自由输入）
 - **多分辨率** — 自动检测游戏分辨率，切换对应模板子目录
 - **撤销 / 删除** — 手动录入支持逐级撤销，支持删除最后一条记录
@@ -107,6 +107,7 @@ python main.py
 | `debug.log_mode` | 日志模式（开启后写入 `logs/`） | `false` |
 | `debug.log_scope` | 日志记录范围：`status`/`screenshots`/`errors` | `["status","screenshots","errors"]` |
 | `recorder.daily_files` | 是否按日期分 CSV 文件 | `false` |
+| `stats.columns` | 统计表格显示的列（空 = 全部） | `[]` |
 | `clipboard.vertical_layout` | 剪贴板竖排模式 | `false` |
 | `clipboard.scope` | 复制范围（`"all"` / `"current"`） | `"all"` |
 | `floating_window.width` / `height` | 悬浮窗尺寸 | `250` / `300` |
