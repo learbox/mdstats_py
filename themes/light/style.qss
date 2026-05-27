@@ -95,6 +95,18 @@ QFrame#topPanel, QFrame#bottomPanel {
     border: none;
     font-size: 12px;
 }
+#infoLabel {
+    color: {{color.text_secondary}};
+    background: transparent;
+    border: none;
+    font-size: 12px;
+}
+#label_deck {
+    color: {{color.text_primary}};
+    background: transparent;
+    border: none;
+    font-size: 13px;
+}
 
 /* ==================================================================
    QPushButton — 所有按钮（默认状态 + 交互伪状态）

@@ -466,6 +466,16 @@ class MainWindow(QMainWindow):
         self._update_resize_cursor(event.globalPosition().toPoint())
         super().mouseMoveEvent(event)
 
+    def enterEvent(self, event) -> None:
+        """鼠标划入窗口时重置光标为默认箭头，避免 resize 光标残留。"""
+        self.setCursor(Qt.CursorShape.ArrowCursor)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        """鼠标离开窗口时恢复默认光标。"""
+        self.setCursor(Qt.CursorShape.ArrowCursor)
+        super().leaveEvent(event)
+
     def mouseDoubleClickEvent(self, event) -> None:
         """双击边缘区域不处理（仅标题栏双击可自定义，当前为空实现）。"""
         if self._edge_at(event.globalPosition().toPoint()):
@@ -1363,6 +1373,16 @@ class MainWindow(QMainWindow):
         with open(_APP_STATE_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
 
+    @staticmethod
+    def _parse_pos(raw: object, min_val: int = -100) -> list[int] | None:
+        """验证并返回有效的 [x, y] 坐标列表，无效则返回 None。"""
+        if isinstance(raw, list) and len(raw) == 2:
+            if all(isinstance(v, (int, float)) for v in raw):
+                x, y = int(raw[0]), int(raw[1])
+                if x >= min_val and y >= min_val:
+                    return [x, y]
+        return None
+
     def _save_float_window_pos(self) -> None:
         """将悬浮窗当前位置保存到 .app_state.json。"""
         if self._float_window is None:
@@ -1379,9 +1399,8 @@ class MainWindow(QMainWindow):
             1. 读取保存的位置 → 如果坐标合理（≥ -1000）则恢复
             2. 否则居中放置在主屏幕上
         """
-        saved = self._read_app_state()
-        pos = saved.get("float_pos")
-        if pos and len(pos) == 2 and pos[0] >= -1000 and pos[1] >= -1000:
+        pos = self._parse_pos(self._read_app_state().get("float_pos"), min_val=-1000)
+        if pos is not None:
             self._float_window.move(pos[0], pos[1])
             return
         # 兜底: 主屏幕中央
@@ -1734,9 +1753,8 @@ class MainWindow(QMainWindow):
 
         坐标验证: x ≥ -100, y ≥ -100（越界或负太多说明是异常值，不恢复）。
         """
-        data = self._read_app_state()
-        pos = data.get("main_pos")
-        if pos and len(pos) == 2 and pos[0] >= -100 and pos[1] >= -100:
+        pos = self._parse_pos(self._read_app_state().get("main_pos"))
+        if pos is not None:
             self.move(pos[0], pos[1])
 
     def _save_main_window_pos(self) -> None:

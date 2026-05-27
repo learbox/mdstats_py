@@ -148,8 +148,7 @@ class Theme:
 
 _BUILTIN_COLORS: dict[str, str] = {
     # ---- 背景层次 ----
-    "main_bg": "#f5f6fa", "widget_bg": "#ffffff", "alt_row_bg": "#f5f7fa",
-    "statusbar_bg": "#ecf0f1",
+    "main_bg": "#f5f6fa", "widget_bg": "#ffffff", "statusbar_bg": "#ecf0f1",
     # ---- 文字颜色 ----
     "text_primary": "#2c3e50", "text_secondary": "#7f8c8d",
     "text_disabled": "#bdc3c7", "table_text": "#2c3e50",
@@ -157,7 +156,6 @@ _BUILTIN_COLORS: dict[str, str] = {
     "border": "#dcdde1", "border_hover": "#3498db", "border_focus": "#3498db",
     "border_disabled": "#ecf0f1",
     # ---- 交互状态 ----
-    "hover_bg": "#e8f0fe", "pressed_bg": "#d5e4f7",
     "selection_bg": "#d5e4f7",
     # ---- 语义色（手动按钮） ----
     "win": "#27ae60", "lose": "#c0392b", "coin": "#e67e22", "turn": "#2980b9",
@@ -165,7 +163,7 @@ _BUILTIN_COLORS: dict[str, str] = {
     # ---- 分割器与装饰 ----
     "splitter": "#dcdde1", "splitter_hover": "#3498db", "header_accent": "#3498db",
     # ---- 下拉框与弹窗 ----
-    "combo_bg": "#ffffff", "combo_border": "#dcdde1", "msgbox_bg": "#f5f6fa",
+    "combo_border": "#dcdde1", "msgbox_bg": "#f5f6fa",
     # ---- 细粒度控件配色 ----
     "button_bg": "#ffffff", "button_border": "#dcdde1",
     "button_hover_bg": "#e8f0fe", "button_pressed_bg": "#d5e4f7",
@@ -175,8 +173,7 @@ _BUILTIN_COLORS: dict[str, str] = {
     "table_grid": "#dcdde1", "table_alt_bg": "#f5f7fa",
     "table_item_bg": "transparent", "table_item_alt_bg": "transparent",
     "table_selection_bg": "#d5e4f7",
-    "header_v_bg": "#ecf0f1", "header_v_border": "#dcdde1",
-    "corner_bg": "#ecf0f1", "corner_border": "#dcdde1",
+    "header_v_border": "#dcdde1",
     "scrollbar_handle": "#7f8c8d", "scrollbar_handle_hover": "#3498db",
     "combo_body_bg": "#ffffff", "combo_list_bg": "#ffffff",
 }
@@ -215,6 +212,8 @@ QFrame#topPanel, QFrame#bottomPanel { background: transparent; border: none; bor
 /* ---------- 状态栏 ---------- */
 #customStatusBar { background-color: %(statusbar_bg)s; border: none; border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; }
 #statusMessage { color: %(text_secondary)s; background: transparent; border: none; font-size: 12px; }
+#infoLabel { color: %(text_secondary)s; background: transparent; border: none; font-size: 12px; }
+#label_deck { color: %(text_primary)s; background: transparent; border: none; font-size: 13px; }
 /* ---------- 按钮 ---------- */
 QPushButton { background-color: %(button_bg)s; color: %(text_primary)s; border: 1px solid %(button_border)s; border-radius: 12px; padding: 5px 14px; }
 QPushButton:hover { background-color: %(button_hover_bg)s; border-color: %(border_hover)s; }

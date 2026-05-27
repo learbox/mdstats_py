@@ -94,7 +94,7 @@ python main.py
 点击主界面的「设置」按钮打开图形化设置弹窗，可视化编辑所有配置项。也可以直接编辑 `config.toml` 后点击「设置 → 确定」重载。
 
 | 配置项 | 说明 | 默认值 |
-|---|---|---|
+| --- | --- | --- |
 | `detection.interval` | 截图间隔（秒） | `0.3` |
 | `detection.confidence_threshold` | 匹配置信度阈值 (0.0~1.0) | `0.8` |
 | `window.width` / `height` | 主窗口尺寸（像素） | `1300` / `700` |
@@ -168,7 +168,7 @@ mdstats_py/
 本项目使用 MIT 协议。依赖的第三方库及其协议：
 
 | 库 | 协议 |
-|----|------|
+| --- | --- |
 | PySide6 | LGPL |
 | opencv-python | Apache 2.0 |
 | numpy | BSD-3-Clause |
