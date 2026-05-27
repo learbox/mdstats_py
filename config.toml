@@ -14,9 +14,9 @@ confidence_threshold = 0.8
 # 检测到关键事件时保存截图到 screenshots/，下一局开始时自动清除
 save_screenshots = true
 # 开启日志模式：将运行信息写入 logs/ 目录
-log_mode = true
+log_mode = false
 # 日志记录范围："status"=状态栏消息, "screenshots"=截图事件, "errors"=错误信息
-log_scope = ["screenshots", "errors"]
+log_scope = ["status", "screenshots", "errors"]
 
 [window]
 # 主窗口宽度（像素）
@@ -32,7 +32,7 @@ theme = "macaron"
 # 对方卡组预设
 [opponent_decks]
 # 记录表格下拉菜单的预设选项
-presets = ["闪刀姬", "烙印", "白银城", "k9vs"]
+presets = ["闪刀姬", "烙印", "白银城", "k9vs", "杀手旋律", "绚岚"]
 
 # 数据存储
 [recorder]
@@ -40,6 +40,11 @@ presets = ["闪刀姬", "烙印", "白银城", "k9vs"]
 daily_files = false
 # 启动时自动填入最近一次使用的卡组（从 CSV 读取）
 remember_last_deck = true
+
+# 统计表格显示
+[stats]
+# 统计表格显示的列名列表（空 = 全部显示）
+columns = ["卡组", "对局数", "胜", "负", "胜率", "赢硬币次数", "输硬币次数", "赢硬币概率", "赢硬币胜率", "输硬币胜率", "先攻次数", "后攻次数", "先攻胜", "后攻胜", "先攻胜率", "后攻胜率"]
 
 # 剪贴板复制行为
 [clipboard]

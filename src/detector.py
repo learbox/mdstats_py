@@ -109,7 +109,7 @@ def set_resolution(width: int, height: int) -> None:
     _resolution_subdir = f"{width}x{height}"
 
 
-_REQUIRED_TEMPLATES = ["coin_win", "coin_lose", "go_first", "go_second", "victory", "defeat"]
+_REQUIRED_TEMPLATES = ["coin_win", "coin_lose", "go_first", "go_second", "victory", "defeat", "rank_up", "rank_down"]
 
 # 模板内存缓存：init_templates() 预加载后填充，后续 _get_cached_template 直接取用
 # 键为模板名（不含扩展名），值为 numpy 数组或 None（加载失败时）
@@ -303,4 +303,34 @@ def detect_result(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
         matched, _conf = match_template(screenshot, key, threshold)
         if matched:
             return "win" if key == "victory" else "lose"
+    return None
+
+
+def detect_rank(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
+    """阶段 1 附 — 检测是否为升段局或降段局。
+
+    在硬币结果画面的同一张截图上执行。Master Duel 在段位升降时
+    会在硬币画面中额外显示升段/降段标识——与硬币结果同时出现、
+    同时消失，是同一帧画面的一部分，因此复用 detect_coin_win
+    的截图，无需额外截图或新增状态机阶段。
+
+    模板（rank_up.png / rank_down.png）缺失时，match_template
+    返回 (False, 0.0)，最终返回 None，视为普通局。
+
+    注意：本函数是"附带"检测——返回值仅用于记录段位升降信息，
+    不影响硬币/先后攻/胜负的主流程。误判或漏判都不会阻塞状态机。
+
+    Args:
+        screenshot: 游戏截图（BGR 格式），与 detect_coin_win 使用同一张。
+        threshold: 匹配置信度阈值。
+
+    Returns:
+        'up'    — 升段局
+        'down'  — 降段局
+        None    — 未识别到（普通局，或模板缺失）
+    """
+    for key in ("rank_up", "rank_down"):
+        matched, _conf = match_template(screenshot, key, threshold)
+        if matched:
+            return "up" if key == "rank_up" else "down"
     return None

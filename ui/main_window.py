@@ -170,15 +170,19 @@ class ComboDelegate(QStyledItemDelegate):
         setModelData()  — 把编辑器的新值写回表格模型
     """
 
-    def __init__(self, items: list[str], parent: QTableWidget | None = None) -> None:
+    def __init__(self, items: list[str], parent: QTableWidget | None = None,
+                 editable: bool = False) -> None:
         """初始化委托。
 
         参数:
-            items  — 下拉选项列表，如 ["是", "否"]
-            parent — 所属的 QTableWidget（用于生命周期管理）
+            items    — 下拉选项列表，如 ["是", "否"]
+            parent   — 所属的 QTableWidget（用于生命周期管理）
+            editable — 是否允许用户自由输入（默认否）。用于段位升降等
+                       需要"留空"的列：下拉选"升段/降段"，也可清空表示普通局。
         """
         super().__init__(parent)
         self._items = items
+        self._editable = editable
 
     def createEditor(self, parent_widget, _option, _index) -> QComboBox:
         """创建编辑器：一个非可编辑的 QComboBox。
@@ -190,6 +194,7 @@ class ComboDelegate(QStyledItemDelegate):
         """
         combo = QComboBox(parent_widget)
         combo.addItems(self._items)
+        combo.setEditable(self._editable)                # 可编辑模式：允许清空文本
         combo.setMaxVisibleItems(len(self._items))      # 弹出列表紧凑，不留白
         _setup_combo_editor(combo)                       # 公共初始化（调色板+不透明背景）
         combo.activated.connect(
@@ -652,6 +657,9 @@ class MainWindow(QMainWindow):
         self._stage: int = 0                  # 统一阶段: 0=等硬币, 1=等先后攻, 2=等胜负
         self._coin_cache: str = ""            # 硬币结果缓存（"win"/"lose"）
         self._turn_cache: str = ""            # 先后攻结果缓存（"first"/"second"）
+        self._rank_cache: str = ""            # 段位升降缓存（"up"/"down"/""）
+        # rank_detected 在硬币阶段触发，但写入 CSV 需等到胜负阶段 —
+        # 中间隔着先后攻和对局本身，所以需要缓存。
         self._suppress_cell_changed: bool = False # 刷新记录表时抑制 cellChanged（避免误写 CSV）
         self._cols_restored: bool = False     # 列宽是否已从持久化文件恢复
 
@@ -783,6 +791,8 @@ class MainWindow(QMainWindow):
         self._record_table.setItemDelegateForColumn(6, ComboDelegate(["先攻", "后攻"], self._record_table))
         # 列7: 结果 (胜/负)
         self._record_table.setItemDelegateForColumn(7, ComboDelegate(["胜", "负"], self._record_table))
+        # 列8: 段位升降 (升段/降段/空白=普通局)
+        self._record_table.setItemDelegateForColumn(8, ComboDelegate(["升段", "降段", ""], self._record_table))
         # 列4: 对方卡组 (可编辑下拉 — 预设值来自 config.toml)
         opponent_presets: list[str] = self._config.get("opponent_decks", {}).get("presets", [])
         self._record_table.setItemDelegateForColumn(4, EditableComboDelegate(opponent_presets, self._record_table))
@@ -984,6 +994,7 @@ class MainWindow(QMainWindow):
         self._worker = StatsWorker()
         self._worker.status_update.connect(self._on_status)
         self._worker.coin_win_detected.connect(self._on_coin_win_detected)
+        self._worker.rank_detected.connect(self._on_rank_detected)
         self._worker.turn_detected.connect(self._on_turn_detected)
         self._worker.result_detected.connect(self._on_result_detected)
         self._worker.finished.connect(lambda: setattr(self, "_worker", None))
@@ -1039,15 +1050,21 @@ class MainWindow(QMainWindow):
         """自动识别到硬币结果 → 缓存并推进到阶段1。
 
         仅当手动尚未抢先选择时生效（_stage == 0 才处理）。
-        手动按钮在自动识别后也需要更新（文字从"赢/输硬币"变成"先攻/后攻"）。
+        状态栏消息由 worker 统一发送（含段位升降信息），此处不再重复。
         """
         if self._stage != 0:
             return
         self._coin_cache = coin_win
         self._stage = 1
         self._update_manual_buttons()
-        coin_text = "赢硬币" if coin_win == "win" else "输硬币"
-        self._show_status(f"已识别: {coin_text} — 等待先后攻…")
+
+    def _on_rank_detected(self, rank: str) -> None:
+        """自动识别到段位升降 → 缓存结果。
+
+        rank 可能的值: 'up'（升段）、'down'（降段）、''（普通局）。
+        结果在 _on_result_detected 中随记录一起写入 CSV。
+        """
+        self._rank_cache = rank
 
     def _on_turn_detected(self, turn: str) -> None:
         """自动识别到先后攻 → 缓存并推进到阶段2。
@@ -1073,7 +1090,8 @@ class MainWindow(QMainWindow):
         if self._stage != 2:
             return
         add_record(coin_win=self._coin_cache, turn=self._turn_cache,
-                   result=result, deck=self._deck_input.text().strip())
+                   result=result, deck=self._deck_input.text().strip(),
+                   rank=self._rank_cache)
         self._reset_stage()
         self._reload_tables()
         result_text = "胜" if result == "win" else "负"
@@ -1181,6 +1199,7 @@ class MainWindow(QMainWindow):
         self._stage = 0
         self._coin_cache = ""
         self._turn_cache = ""
+        self._rank_cache = ""
         self._update_manual_buttons()
 
     def _update_manual_buttons(self) -> None:
@@ -1224,15 +1243,23 @@ class MainWindow(QMainWindow):
         """刷新统计表格（上方表格）。
 
         数据流: load_records() → compute_stats() → 逐行填充 QTableWidget。
-        渲染: 所有单元格居中，"合计"行粗体。
-        完成后同步刷新悬浮窗内容。
+        渲染列由 config.toml 的 [stats].columns 控制（空 = 全部）。
+        单元格居中，"合计"行粗体。完成后同步刷新悬浮窗内容。
         """
         records = load_records()
         stats = compute_stats(records)
 
+        # 读取用户选择的统计列（空列表 = 显示全部）
+        cfg = load_config()
+        selected = cfg.get("stats", {}).get("columns")
+        columns = selected if selected else list(STATS_COLUMNS)
+
+        self._stats_table.setColumnCount(len(columns))
+        self._stats_table.setHorizontalHeaderLabels(columns)
+
         self._stats_table.setRowCount(len(stats))
         for row_idx, row_data in enumerate(stats):
-            for col_idx, col_name in enumerate(STATS_COLUMNS):
+            for col_idx, col_name in enumerate(columns):
                 value = row_data.get(col_name, "")
                 item = QTableWidgetItem(str(value))
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1676,9 +1703,17 @@ class MainWindow(QMainWindow):
     # =========================================================================
 
     # 列宽默认值（像素），首次运行在 .app_state.json 不存在时使用
+    # stats  列序: 0=卡组 1=对局数 2=胜 3=负 4=胜率
+    #              5=赢硬币次数 6=输硬币次数 7=赢硬币概率
+    #              8=赢硬币胜率 9=输硬币胜率 10=先攻次数 11=后攻次数
+    #              12=先攻胜 13=后攻胜 14=先攻胜率 15=后攻胜率(stretch)
+    # stats  记录 15 列，列 15 由 stretchLastSection 自动填充
+    # record 列序: 0=序号(隐藏,不记录) 1=日期 2=时间 3=使用卡组 4=对方卡组
+    #              5=赢硬币 6=先后攻 7=结果 8=段位升降 9=备注(stretch,不记录)
+    # record 记录 8 列（跳过隐藏列 0 和拉伸列 9）
     _DEFAULT_COLUMN_WIDTHS = {
-        "stats":  [80, 60, 45, 45, 70, 75, 75, 75, 85, 85, 80, 75, 70, 70, 75, 75],
-        "record": [ 0, 115, 90, 75, 80, 65, 70, 50],
+        "stats":  [80, 60, 45, 45, 70, 75, 75, 75, 85, 85, 80, 75, 70, 70, 75],
+        "record": [115, 90, 75, 80, 65, 70, 50, 65],
     }
 
     def showEvent(self, event) -> None:
@@ -1706,6 +1741,7 @@ class MainWindow(QMainWindow):
             2. 逐列应用，宽度的最小值 = 20px（防止太窄看不见）
             3. 如果保存数据不足（列数增加了），后面的用默认值
             4. 最后一列由 stretchLastSection 管理，不在此处理
+            5. record 表跳过列 0（序号，始终隐藏），从列 1 开始恢复
         """
         saved = self._read_app_state()
 
@@ -1714,20 +1750,29 @@ class MainWindow(QMainWindow):
             (self._record_table, "record", self._DEFAULT_COLUMN_WIDTHS["record"]),
         ]:
             widths = saved.get(key, [])
-            for col in range(table.columnCount() - 1):  # 跳过最后一列
-                if widths and col < len(widths):
-                    table.setColumnWidth(col, max(20, widths[col]))
-                elif col < len(defaults):
-                    table.setColumnWidth(col, defaults[col])
+            # record 表跳过多余的列 0（旧格式曾保存隐藏列"序号"的宽度 0）
+            if key == "record" and widths and widths[0] == 0:
+                widths = widths[1:]
+            start_col = 1 if key == "record" else 0
+            for col in range(start_col, table.columnCount() - 1):  # 跳过最后一列
+                i = col - start_col  # widths 数组的索引
+                if widths and i < len(widths):
+                    table.setColumnWidth(col, max(20, widths[i]))
+                elif i < len(defaults):
+                    table.setColumnWidth(col, defaults[i])
 
     def _save_column_widths(self) -> None:
         """保存绝对列宽到 .app_state.json。
 
         跳过最后一列（由 stretchLastSection 自动管理宽度）。
+        record 表额外跳过列 0（序号，始终隐藏，不持久化）。
         """
         data = self._read_app_state()
         for table, key in [(self._stats_table, "stats"), (self._record_table, "record")]:
-            data[key] = [table.columnWidth(c) for c in range(table.columnCount() - 1)]
+            if key == "record":
+                data[key] = [table.columnWidth(c) for c in range(1, table.columnCount() - 1)]
+            else:
+                data[key] = [table.columnWidth(c) for c in range(table.columnCount() - 1)]
         self._write_app_state(data)
 
     # =========================================================================

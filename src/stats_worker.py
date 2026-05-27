@@ -113,8 +113,15 @@ class StatsWorker(QThread):
 
     status_update(str)     — 状态栏消息更新
     coin_win_detected(str) — 硬币识别结果: 'win'（赢）或 'lose'（输）
+    rank_detected(str)     — 段位升降结果: 'up'/'down'/''。
+                             与 coin_win_detected 同时触发（同一张截图），
+                             独立信号不阻塞状态机；'' = 普通局。
     turn_detected(str)     — 先后攻结果: 'first'（先攻）或 'second'（后攻）
     result_detected(str)   — 对局结果: 'win'（胜）或 'lose'（负）
+
+    信号触发顺序 (每局):
+        status_update (持续) → coin_win_detected + rank_detected (同时)
+        → turn_detected → result_detected → 循环
 
     =========================================================================
     与 MainWindow 手动按钮的联动
@@ -128,6 +135,7 @@ class StatsWorker(QThread):
     # ---- Qt 信号定义 ----
     status_update = Signal(str)       # 状态栏消息
     coin_win_detected = Signal(str)   # 硬币识别结果
+    rank_detected = Signal(str)       # 段位升降结果（'up'/'down'/''）
     turn_detected = Signal(str)       # 先后攻识别结果
     result_detected = Signal(str)     # 对局胜负结果
 
@@ -505,16 +513,29 @@ class StatsWorker(QThread):
                 # 检测硬币输赢（模板：coin_win.png / coin_lose.png）
                 coin_win = _det.detect_coin_win(screenshot, self._threshold)
                 if coin_win:
+                    # 同一张截图检测段位升降（升段/降段/普通局）
+                    # 不增加新状态，不影响后续流程，结果随 coin 一起发射
+                    rank_result = _det.detect_rank(screenshot, self._threshold)
+                    self.rank_detected.emit(rank_result or "")
+
                     # 调试截图：如果开启了截图保存，在新一局开始前先清除旧截图
                     if self._save_screenshots:
                         if self._new_game:
                             self._clear_screenshots()        # 清除上一局的所有截图
                             self._new_game = False
                         self._save_detection_screenshot(screenshot, f"coin_{coin_win}")
+                        if rank_result:                      # 如果是升段/降段局也保存一张
+                            self._save_detection_screenshot(screenshot, f"rank_{rank_result}")
                     self.coin_win_detected.emit(coin_win)    # 通知主线程
                     coin_text = "赢硬币" if coin_win == "win" else "输硬币"
+                    # 状态栏消息中附加段位升降信息（如有）
+                    rank_text = ""
+                    if rank_result == "up":
+                        rank_text = "（升段局）"
+                    elif rank_result == "down":
+                        rank_text = "（降段局）"
                     self.status_update.emit(
-                        f"已识别: {coin_text} — 等待识别先后攻…"
+                        f"已识别: {coin_text}{rank_text} — 等待识别先后攻…"
                     )
                     self._state = "WAITING_TURN"              # 状态前进一步
 

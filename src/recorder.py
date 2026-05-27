@@ -61,7 +61,7 @@ _active_csv_path: Path = _CSV_DIR / "data.csv"
 # ---------------------------------------------------------------------------
 # 这些列名在整个项目中作为字典键使用，修改时需要同步更新所有引用位置。
 # 记录表格列（与 CSV 表头一致）
-COLUMNS = ["序号", "日期", "时间", "使用卡组", "对方卡组", "赢硬币", "先后攻", "结果", "备注"]
+COLUMNS = ["序号", "日期", "时间", "使用卡组", "对方卡组", "赢硬币", "先后攻", "结果", "段位升降", "备注"]
 
 # 统计表格列（与 compute_stats 输出的字典键一致）
 STATS_COLUMNS = [
@@ -70,6 +70,7 @@ STATS_COLUMNS = [
     "赢硬币胜率", "输硬币胜率",
     "先攻次数", "后攻次数", "先攻胜", "后攻胜",
     "先攻胜率", "后攻胜率",
+    "升段次数", "降段次数", "升段胜率", "降段胜率",
 ]
 
 
@@ -183,6 +184,7 @@ def add_record(
     deck: str = "",
     opponent_deck: str = "",
     notes: str = "",
+    rank: str = "",
 ) -> dict[str, str]:
     """添加一条新的对局记录到 CSV 文件。
 
@@ -204,6 +206,8 @@ def add_record(
         deck:          玩家使用的卡组名称。
         opponent_deck: 对手使用的卡组名称（可选）。
         notes:         备注信息（可选）。
+        rank:          段位升降结果，'up' / 'down' / ''（来自 detect_rank）。
+                       也可直接传中文 "升段" / "降段"。默认空字符串表示普通局。
 
     Returns:
         新添加的记录字典。
@@ -212,6 +216,7 @@ def add_record(
         - coin_win: 'win' → "是", 'lose' → "否"
         - turn:     'first' → "先攻", 'second' → "后攻"
         - result:   'win' → "胜", 'lose' → "负"
+        - rank:     'up' → "升段", 'down' → "降段"
         如果传入的值不在映射表中，保持原值不变（以支持手动输入的中文）。
     """
     records = load_records()
@@ -221,6 +226,7 @@ def add_record(
         "赢硬币": {"win": "是", "lose": "否"},
         "先后攻": {"first": "先攻", "second": "后攻"},
         "结果":   {"win": "胜", "lose": "负"},
+        "段位升降": {"up": "升段", "down": "降段"},
     }
 
     def _map_or_warn(field: str, raw: str) -> str:
@@ -247,6 +253,7 @@ def add_record(
         "赢硬币": _map_or_warn("赢硬币", coin_win),
         "先后攻": _map_or_warn("先后攻", turn),
         "结果": _map_or_warn("结果", result),
+        "段位升降": _map_or_warn("段位升降", rank),
         "备注": notes,
     }
     records.append(new_record)
@@ -295,6 +302,8 @@ def compute_stats(records: list[dict[str, str]]) -> list[dict[str, str | int]]:
             "先攻次数": 0, "后攻次数": 0,
             "先攻胜": 0, "后攻胜": 0,
             "先攻胜率": "", "后攻胜率": "",
+            "升段次数": 0, "降段次数": 0,
+            "升段胜率": "", "降段胜率": "",
         }]
 
     # ---------- 初始化累加器 ----------
@@ -310,6 +319,10 @@ def compute_stats(records: list[dict[str, str]]) -> list[dict[str, str | int]]:
         "second": 0,          # 后攻次数
         "first_win": 0,       # 先攻时获胜次数
         "second_win": 0,      # 后攻时获胜次数
+        "rank_up": 0,         # 升段次数
+        "rank_down": 0,       # 降段次数
+        "rank_up_win": 0,     # 升段且获胜次数
+        "rank_down_win": 0,   # 降段且获胜次数
     })
 
     # ---------- 总计累加器 ----------
@@ -324,6 +337,10 @@ def compute_stats(records: list[dict[str, str]]) -> list[dict[str, str | int]]:
     second_all = 0
     first_win_all = 0
     second_win_all = 0
+    rank_up_all = 0
+    rank_down_all = 0
+    rank_up_win_all = 0
+    rank_down_win_all = 0
 
     # ---------- 遍历所有记录，累加计数 ----------
     for r in records:
@@ -372,6 +389,21 @@ def compute_stats(records: list[dict[str, str]]) -> list[dict[str, str | int]]:
                 d["second_win"] += 1
                 second_win_all += 1
 
+        # 段位升降统计
+        seg = r.get("段位升降", "")
+        if seg == "升段":
+            d["rank_up"] += 1
+            rank_up_all += 1
+            if result == "胜":
+                d["rank_up_win"] += 1
+                rank_up_win_all += 1
+        elif seg == "降段":
+            d["rank_down"] += 1
+            rank_down_all += 1
+            if result == "胜":
+                d["rank_down_win"] += 1
+                rank_down_win_all += 1
+
     # ---------- 辅助函数：计算百分比 ----------
     def _rate(win_count: int, total: int) -> str:
         if total == 0:
@@ -395,6 +427,9 @@ def compute_stats(records: list[dict[str, str]]) -> list[dict[str, str | int]]:
             "先攻胜": d["first_win"], "后攻胜": d["second_win"],
             "先攻胜率": _rate(d["first_win"], d["first"]),
             "后攻胜率": _rate(d["second_win"], d["second"]),
+            "升段次数": d["rank_up"], "降段次数": d["rank_down"],
+            "升段胜率": _rate(d["rank_up_win"], d["rank_up"]),
+            "降段胜率": _rate(d["rank_down_win"], d["rank_down"]),
         })
 
     # ---------- 总计行（始终放在最后） ----------
@@ -411,6 +446,9 @@ def compute_stats(records: list[dict[str, str]]) -> list[dict[str, str | int]]:
         "先攻胜": first_win_all, "后攻胜": second_win_all,
         "先攻胜率": _rate(first_win_all, first_all),
         "后攻胜率": _rate(second_win_all, second_all),
+        "升段次数": rank_up_all, "降段次数": rank_down_all,
+        "升段胜率": _rate(rank_up_win_all, rank_up_all),
+        "降段胜率": _rate(rank_down_win_all, rank_down_all),
     })
 
     return stats

@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, QPoint, QTranslator, QLibraryInfo, Signal
-from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPixmap
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QColorDialog, QComboBox, QDialog,
     QDoubleSpinBox, QFontComboBox, QGroupBox, QHBoxLayout, QLabel,
@@ -135,7 +135,43 @@ class ColorButton(QPushButton):
 # =============================================================================
 
 class DualListWidget(QWidget):
-    """双列选择列表：左边可选，右边已选，中间箭头按钮移动和排序。"""
+    """双列选择列表：左边可选，右边已选，中间箭头按钮移动和排序。
+
+    箭头按钮用 QPainter 绘制图标而非文字，避免 QSS 字体覆盖导致
+    Unicode 箭头（→←↑↓）无法正常渲染。
+    """
+
+    @staticmethod
+    def _make_arrow(direction: str) -> QIcon:
+        """用 QPainter 绘制杆+箭头风格的图标（16×16 px），模仿 →←↑↓。"""
+        from PySide6.QtCore import QPointF
+        from PySide6.QtGui import QPen
+        pix = QPixmap(16, 16)
+        pix.fill(Qt.GlobalColor.transparent)
+        p = QPainter(pix)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(Qt.GlobalColor.black, 1)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        p.setPen(pen)
+        if direction == "right":
+            p.drawLine(QPointF(3, 8), QPointF(12, 8))        # 杆
+            p.drawLine(QPointF(12, 8), QPointF(8.5, 4.5))     # 上箭头
+            p.drawLine(QPointF(12, 8), QPointF(8.5, 11.5))    # 下箭头
+        elif direction == "left":
+            p.drawLine(QPointF(13, 8), QPointF(4, 8))
+            p.drawLine(QPointF(4, 8), QPointF(7.5, 4.5))
+            p.drawLine(QPointF(4, 8), QPointF(7.5, 11.5))
+        elif direction == "up":
+            p.drawLine(QPointF(8, 13), QPointF(8, 4))
+            p.drawLine(QPointF(8, 4), QPointF(4.5, 7.5))
+            p.drawLine(QPointF(8, 4), QPointF(11.5, 7.5))
+        else:  # down
+            p.drawLine(QPointF(8, 3), QPointF(8, 12))
+            p.drawLine(QPointF(8, 12), QPointF(4.5, 8.5))
+            p.drawLine(QPointF(8, 12), QPointF(11.5, 8.5))
+        p.end()
+        return QIcon(pix)
 
     def __init__(self, available: list[str], selected: list[str],
                  parent: QWidget | None = None) -> None:
@@ -151,23 +187,27 @@ class DualListWidget(QWidget):
         left_v.addWidget(self._left)
         layout.addLayout(left_v)
 
-        # 中间：方向按钮
+        # 中间：方向按钮（图标由 QPainter 绘制，不受 QSS 字体影响）
         mid = QVBoxLayout()
         mid.addStretch()
-        self._btn_r = QPushButton("→")
+        self._btn_r = QPushButton()
+        self._btn_r.setIcon(self._make_arrow("right"))
         self._btn_r.setFixedSize(36, 28)
         self._btn_r.clicked.connect(self._move_right)
         mid.addWidget(self._btn_r)
-        self._btn_l = QPushButton("←")
+        self._btn_l = QPushButton()
+        self._btn_l.setIcon(self._make_arrow("left"))
         self._btn_l.setFixedSize(36, 28)
         self._btn_l.clicked.connect(self._move_left)
         mid.addWidget(self._btn_l)
         mid.addSpacing(12)
-        self._btn_u = QPushButton("↑")
+        self._btn_u = QPushButton()
+        self._btn_u.setIcon(self._make_arrow("up"))
         self._btn_u.setFixedSize(36, 28)
         self._btn_u.clicked.connect(self._move_up)
         mid.addWidget(self._btn_u)
-        self._btn_d = QPushButton("↓")
+        self._btn_d = QPushButton()
+        self._btn_d.setIcon(self._make_arrow("down"))
         self._btn_d.setFixedSize(36, 28)
         self._btn_d.clicked.connect(self._move_down)
         mid.addWidget(self._btn_d)
@@ -774,6 +814,15 @@ class ConfigDialog(QDialog):
         gl.addLayout(ar)
         lo.addWidget(g)
 
+        # 统计表格显示列选择
+        from src.recorder import STATS_COLUMNS
+        g_stats = QGroupBox("统计表格显示的列")
+        g_stats.setToolTip("选择要在上方统计表格中显示的列。\n清空全部 = 显示所有列。")
+        gl_stats = QVBoxLayout(g_stats)
+        self._stats_dual = DualListWidget(list(STATS_COLUMNS), list(STATS_COLUMNS))
+        gl_stats.addWidget(self._stats_dual)
+        lo.addWidget(g_stats)
+
         self._daily_files = QCheckBox("按日期分文件存储 CSV")
         lo.addWidget(self._daily_files)
         self._remember_deck = QCheckBox("启动时自动填入上次使用的卡组")
@@ -885,9 +934,22 @@ class ConfigDialog(QDialog):
             c.get("recorder", {}).get("remember_last_deck", False)
         )
 
+        # 统计表格列选择
+        saved_stats = c.get("stats", {}).get("columns")
+        if saved_stats:
+            from src.recorder import STATS_COLUMNS
+            old = self._stats_dual
+            self._stats_dual = DualListWidget(list(STATS_COLUMNS), list(saved_stats))
+            self._replace_in_layout(self._tabs.widget(4), old, self._stats_dual)
+
     @staticmethod
     def _replace_in_layout(parent: QWidget | None, old: QWidget, new: QWidget) -> None:
-        """把布局中的旧控件替换为新控件。"""
+        """把布局中的旧控件替换为新控件。
+
+        支持两级搜索 — DualListWidget 通常嵌套在 QGroupBox → QVBoxLayout 中，
+        顶层布局只能看到 QGroupBox，看不到里面的 DualListWidget。
+        setParent(None) 立即解绑旧控件，避免 deleteLater 延迟导致两个控件并存。
+        """
         if parent is None:
             return
         lo = parent.layout()
@@ -895,11 +957,24 @@ class ConfigDialog(QDialog):
             return
         for i in range(lo.count()):
             item = lo.itemAt(i)
-            if item is not None and item.widget() is old:
-                lo.removeWidget(old)
-                old.deleteLater()
-                lo.addWidget(new)
+            if item is None:
+                continue
+            w = item.widget()
+            # 直接匹配：控件在顶层布局中
+            if w is old:
+                lo.replaceWidget(old, new)
+                old.setParent(None)
                 return
+            # 间接匹配：控件包裹在子容器（如 QGroupBox）的布局中
+            if w is not None:
+                sub = w.layout()
+                if sub is not None:
+                    for j in range(sub.count()):
+                        sw = sub.itemAt(j).widget()
+                        if sw is old:
+                            sub.replaceWidget(old, new)
+                            old.setParent(None)
+                            return
 
     # =========================================================================
     # 保存
@@ -960,6 +1035,9 @@ class ConfigDialog(QDialog):
                 "daily_files": self._daily_files.isChecked(),
                 "remember_last_deck": self._remember_deck.isChecked(),
             },
+            "stats": {
+                "columns": self._stats_dual.get_selected(),
+            },
         }
 
         self._write_toml(data)
@@ -994,6 +1072,7 @@ class ConfigDialog(QDialog):
         a = data.get("appearance", {})
         od = data.get("opponent_decks", {})
         r = data.get("recorder", {})
+        st = data.get("stats", {})
         cb = data.get("clipboard", {})
         fw = data.get("floating_window", {})
         dbg = data.get("debug", {})
@@ -1036,6 +1115,10 @@ class ConfigDialog(QDialog):
             "是否按日期分文件存储 CSV")
         _kv("remember_last_deck", r.get("remember_last_deck", False),
             "启动时自动填入最近一次使用的卡组（从 CSV 读取）")
+
+        lines.extend(["", "# 统计表格显示", "[stats]"])
+        _kv("columns", st.get("columns", []),
+            "统计表格显示的列名列表（空 = 全部显示）")
 
         lines.extend(["", "# 剪贴板复制行为", "[clipboard]"])
         _kv("vertical_layout", cb.get("vertical_layout", False),
