@@ -75,11 +75,15 @@ Master Duel 的一局对局有三个阶段，出现顺序是固定的：
 """
 
 
+from datetime import datetime
+
+import cv2
 from PySide6.QtCore import QThread, Signal
 
 from src import capture as _cap    # 截图模块：定位窗口、截取客户区
 from src import detector as _det   # 识别模块：模板匹配
-from src.config import load_config
+from src.config import load_config, get_project_root
+from src import logger as _log
 
 
 # =============================================================================
@@ -149,18 +153,49 @@ class StatsWorker(QThread):
     def __init__(self, parent=None):
         """初始化工作线程。
 
-        从 config.toml 读取两个关键参数：
-            detection.interval           — 截图间隔（秒），默认 0.5
-            detection.confidence_threshold — 匹配置信度阈值 (0.0~1.0)，默认 0.8
+        从 config.toml 读取以下参数：
+            detection.interval              — 截图间隔（秒），默认 0.5
+            detection.confidence_threshold   — 匹配置信度阈值 (0.0~1.0)，默认 0.8
+            debug.save_screenshots           — 是否保存检测截图，默认 false
+            debug.log_mode                  — 是否开启日志模式，默认 false
+            debug.log_scope                 — 日志记录范围列表，默认全开
+
+        如果日志模式开启，同时初始化日志系统（init_log + set_scopes）。
+        日志文件路径为项目根目录下的 logs/ 文件夹，文件名为 mdstats_YYYYMMDD.log。
 
         初始状态为 WAITING_COIN，线程尚未启动（等待 start() 调用）。
         """
         super().__init__(parent)
         cfg = load_config()
+        # ---- 识别参数 ----
         self._interval: float = cfg.get("detection", {}).get("interval", 0.5)
         self._threshold: float = cfg.get("detection", {}).get("confidence_threshold", 0.8)
+
+        # ---- 调试/实验功能 ----
+        # 注意：save_screenshots 控制是否把截图写到磁盘（PNG 文件），
+        #       log_mode 控制是否写日志文件（logs/*.log），两者是独立开关。
+        #       截图事件的日志记录由 log_scope 中的 "screenshots" 控制，
+        #       即使用户没勾选"截图事件"作用域，只要 save_screenshots=true，
+        #       截图文件仍然会保存，只是不会在日志中写"已保存"消息。
+        dbg = cfg.get("debug", {})
+        self._save_screenshots: bool = dbg.get("save_screenshots", False)
+        if dbg.get("log_mode", False):
+            _log.init_log(get_project_root() / "logs")       # 初始化日志文件
+            _log.set_scopes(set(dbg.get("log_scope",         # 设置记录范围
+                ["status", "screenshots", "errors"])))
+
         self._running = False        # True = 线程正在运行（由 start() 后的 run() 设置）
         self._state = "WAITING_COIN" # 初始状态：等待检测硬币
+
+        # ---- 截图清除标记 ----
+        # 对局结束后，_new_game 被设为 True。下一次检测到硬币时，
+        # 先清空上一局的所有截图，再保存新截图。这样在等待下一局
+        # 开始期间，用户可以慢慢查看上一局的截图。
+        self._new_game = True
+
+        # ---- 当前游戏窗口分辨率 ----
+        # 每次 _ensure_templates 成功时更新，用于截图文件名中的分辨率标注。
+        self._current_size: tuple[int, int] | None = None
 
     # =========================================================================
     # 内部辅助方法
@@ -219,6 +254,7 @@ class StatsWorker(QThread):
         """
         match _cap.get_client_size("masterduel"):
             case (w, h) if w > 0 and h > 0:            # 窗口可用，尺寸有效
+                self._current_size = (w, h)
                 if (w, h) != last_size:                 # 分辨率变了
                     _det.set_resolution(w, h)            # 设置新分辨率
                     msg = _det.init_templates()          # 重新加载模板
@@ -228,6 +264,94 @@ class StatsWorker(QThread):
                 return w, h
             case _:                                     # 窗口不可用
                 return None
+
+    # =========================================================================
+    # 调试截图辅助方法
+    # =========================================================================
+    #
+    # 这两个方法实现了"调试截图"功能的底层逻辑：
+    #
+    #   对局流程:  硬币检测 → 先后攻检测 → 胜负检测 → 回到等硬币
+    #   截图行为:  清除旧图  → 保存 coin → 保存 turn → 保存 result
+    #             ↑ 仅在每局第一次检测到硬币时执行清除
+    #
+    # 清除时机为什么放在"检测到硬币"而不是"检测到胜负"？
+    #   因为在胜负检测后，状态机立刻回到 WAITING_COIN，用户可能来不及
+    #   查看截图就被清空了。把清除时机延后到下一局的硬币出现，用户有
+    #   整个等待下一局的时间来慢慢查看截图。
+    # =========================================================================
+
+    def _clear_screenshots(self) -> None:
+        """清空 screenshots/ 目录下的所有 PNG 截图文件。
+
+        采用逐文件删除的方式（而非 shutil.rmtree 整目录删除），原因：
+            - Windows 上刚写入的文件可能被杀毒软件暂时锁定
+            - 逐文件删除可以跳过被锁定的文件，继续删除其余文件
+            - 不会因为一个文件删除失败而放弃整批清理
+        """
+        ss_dir = get_project_root() / "screenshots"
+        if ss_dir.is_dir():
+            deleted = 0
+            for f in ss_dir.glob("*.png"):
+                try:
+                    f.unlink()         # 删除单个文件
+                    deleted += 1
+                except OSError:
+                    pass               # 文件被占用时跳过，不中断整个清理
+            _log.write("SCRN", f"已清除 {deleted} 个文件")
+        else:
+            ss_dir.mkdir(parents=True, exist_ok=True)
+
+    def _save_detection_screenshot(self, screenshot, tag: str) -> None:
+        """保存检测截图到 screenshots/ 目录。
+
+        文件名格式: {检测类型}_{分辨率}_{时间戳}.png
+        例如: coin_win_1920x1080_20260528_143025_123.png
+
+        为什么用 cv2.imencode 而不是 cv2.imwrite？
+            cv2.imwrite 在 Windows 上对含中文字符的路径（如 E:\\文档\\...）
+            调用 ANSI API 可能写入失败。cv2.imencode 在内存中完成 PNG 编码，
+            不涉及任何文件路径，再用 Python 原生的 write_bytes 写入磁盘 —
+            Python 的文件 I/O 使用 Unicode API，能正确处理中文路径。
+
+        为什么检查 C_CONTIGUOUS 标志？
+            OpenCV 的 imencode 要求传入的 numpy 数组在内存中是连续存储的。
+            mss 截图返回的数组通过 [:, :, :3] 切片后通常仍是连续的，但
+            在极少数情况下（如经过某种变换），可能变成非连续视图。
+            对非连续数组调用 .copy() 会分配一块连续内存，确保 imencode 正常。
+
+        Args:
+            screenshot: BGR 格式的 numpy 数组 (H, W, 3)，来自 capture_window。
+            tag: 检测类型标签，如 "coin_win"、"turn_first"、"result_lose"。
+        """
+        ss_dir = get_project_root() / "screenshots"
+        ss_dir.mkdir(parents=True, exist_ok=True)
+
+        # 构造文件名：tag_分辨率_时间戳.png
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]  # 去掉最后3位微秒
+        if self._current_size:
+            res = f"{self._current_size[0]}x{self._current_size[1]}"
+        else:
+            res = "unknown"  # 分辨率未知时标记为 unknown
+        filepath = ss_dir / f"{tag}_{res}_{timestamp}.png"
+
+        # 确保 numpy 数组在内存中是连续存储的（OpenCV 要求）
+        src = screenshot.copy() if not screenshot.flags['C_CONTIGUOUS'] else screenshot
+
+        # 第一步：在内存中把像素数据编码为 PNG 格式（不涉及文件路径）
+        success, buf = cv2.imencode('.png', src)
+        if not success:
+            _log.write("SCRN", f"{tag} 编码失败")
+            self.status_update.emit(f"截图保存失败({tag}): 编码错误")
+            return
+
+        # 第二步：用 Python 原生文件 I/O 将编码后的字节写入磁盘
+        try:
+            filepath.write_bytes(buf.tobytes())
+            _log.write("SCRN", f"已保存: {filepath.name}")
+        except OSError as e:
+            _log.write("SCRN", f"{tag} 写入失败: {e}")
+            self.status_update.emit(f"截图保存失败({tag}): {e}")
 
     # =========================================================================
     # run() — 工作线程的主循环（由 QThread.start() 自动调用）
@@ -290,6 +414,23 @@ class StatsWorker(QThread):
         线程在以下情况退出 while 循环：
             1. _running 被设为 False（stop() 被调用）
             2. Master Duel 窗口关闭（is_window_open 返回 False）
+        """
+        # ---- 统一异常捕获 ----
+        # QThread 的 run() 方法运行在子线程中，如果抛出未捕获的异常，
+        # Qt 只会把 traceback 打印到 stderr，不会触发 sys.excepthook。
+        # 所以这里需要手动包一层 try/except，确保工作线程中的任何
+        # 异常（模板匹配崩溃、截图编码失败等）都能被记录到日志中。
+        try:
+            self._run_impl()
+        except Exception as e:
+            _log.write("ERROR", f"工作线程异常: {e}")
+            self.status_update.emit(f"工作线程异常: {e}")
+
+    def _run_impl(self) -> None:
+        """run() 的实际实现。
+
+        从 run() 中拆分出来，让 run() 只负责 try/except 异常捕获。
+        这个方法的全部代码就是原来 run() 的主体逻辑，一行未改。
         """
         self._running = True
 
@@ -364,6 +505,12 @@ class StatsWorker(QThread):
                 # 检测硬币输赢（模板：coin_win.png / coin_lose.png）
                 coin_win = _det.detect_coin_win(screenshot, self._threshold)
                 if coin_win:
+                    # 调试截图：如果开启了截图保存，在新一局开始前先清除旧截图
+                    if self._save_screenshots:
+                        if self._new_game:
+                            self._clear_screenshots()        # 清除上一局的所有截图
+                            self._new_game = False
+                        self._save_detection_screenshot(screenshot, f"coin_{coin_win}")
                     self.coin_win_detected.emit(coin_win)    # 通知主线程
                     coin_text = "赢硬币" if coin_win == "win" else "输硬币"
                     self.status_update.emit(
@@ -375,6 +522,9 @@ class StatsWorker(QThread):
                 # 检测先后攻（模板：go_first.png / go_second.png）
                 turn = _det.detect_turn(screenshot, self._threshold)
                 if turn:
+                    # 调试截图：保存先后攻截图
+                    if self._save_screenshots:
+                        self._save_detection_screenshot(screenshot, f"turn_{turn}")
                     self.turn_detected.emit(turn)
                     turn_text = "先攻" if turn == "first" else "后攻"
                     self.status_update.emit(
@@ -386,12 +536,16 @@ class StatsWorker(QThread):
                 # 检测胜负（模板：victory.png / defeat.png）
                 result = _det.detect_result(screenshot, self._threshold)
                 if result:
+                    # 调试截图：保存胜负截图
+                    if self._save_screenshots:
+                        self._save_detection_screenshot(screenshot, f"result_{result}")
                     self.result_detected.emit(result)          # 通知主线程写入 CSV
                     result_text = "胜" if result == "win" else "负"
                     self.status_update.emit(
                         f"已识别结果: {result_text} — 等待下一局…"
                     )
                     self._state = "WAITING_COIN"               # 回到起点，等下一局
+                    self._new_game = True                      # 标记新一局开始，下次检测硬币时清除旧截图
 
             # [4] 休眠 interval 秒
             self._skip()
@@ -422,6 +576,8 @@ class StatsWorker(QThread):
             stage 2 → WAITING_RESULT（等胜负）
         """
         self._state = self._STAGE_MAP[stage]
+        if stage == 0:
+            self._new_game = True   # 手动回到硬币阶段视为新一局
 
     # =========================================================================
     # stop — 停止线程

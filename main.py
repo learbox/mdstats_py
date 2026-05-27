@@ -29,7 +29,40 @@
 import sys
 
 from PySide6.QtWidgets import QApplication
+from src import logger as _log
 from ui.main_window import MainWindow
+
+
+# =============================================================================
+# 全局未捕获异常钩子
+# =============================================================================
+#
+# Python 中未处理的异常默认走 sys.excepthook → 打印 traceback → 退出。
+# 我们在这里插入一层自定义钩子，在默认行为之前先把异常信息写入日志文件。
+#
+# 能捕获什么？
+#   主线程同步路径上的所有异常 — load_config() 的 FileNotFoundError、
+#   capture.py 的错误、任何未被 try/except 处理的崩溃。
+#
+# 不能捕获什么？
+#   QThread 子线程中的异常（Qt 只打印到 stderr，不触发 sys.excepthook）。
+#   工作线程的异常由 StatsWorker.run() 中的独立 try/except 覆盖。
+#
+# 日志模式关闭时：
+#   _log.write() 检测到日志未初始化，静默跳过，不产生任何副作用。
+# =============================================================================
+
+
+def _excepthook(exc_type, exc_value, exc_tb):
+    """全局未捕获异常钩子：先写入日志，再调用默认处理（打印 traceback）。"""
+    # 注意：如果日志尚未初始化（log_mode=false），_log.write() 会静默跳过
+    _log.write("ERROR", f"{exc_type.__name__}: {exc_value}")
+    # 回退到 Python 默认行为：打印 traceback 到 stderr
+    sys.__excepthook__(exc_type, exc_value, exc_tb)
+
+
+# 替换 Python 默认的异常钩子，必须在任何可能抛异常的代码之前设置
+sys.excepthook = _excepthook
 
 
 def main() -> None:

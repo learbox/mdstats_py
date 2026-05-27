@@ -9,6 +9,15 @@ interval = 0.3
 # 匹配置信度阈值 (0.0~1.0)，推荐 0.75~0.90
 confidence_threshold = 0.8
 
+# 调试与实验功能
+[debug]
+# 检测到关键事件时保存截图到 screenshots/，下一局开始时自动清除
+save_screenshots = true
+# 开启日志模式：将运行信息写入 logs/ 目录
+log_mode = true
+# 日志记录范围："status"=状态栏消息, "screenshots"=截图事件, "errors"=错误信息
+log_scope = ["screenshots", "errors"]
+
 [window]
 # 主窗口宽度（像素）
 width = 1300
@@ -28,7 +37,7 @@ presets = ["闪刀姬", "烙印", "白银城", "k9vs"]
 # 数据存储
 [recorder]
 # 是否按日期分文件存储 CSV
-daily_files = true
+daily_files = false
 # 启动时自动填入最近一次使用的卡组（从 CSV 读取）
 remember_last_deck = true
 

@@ -100,6 +100,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.config import get_project_root, load_config
+from src import logger as _log
 from src.recorder import (
     add_record,
     COLUMNS as RECORD_COLUMNS,
@@ -631,6 +632,12 @@ class MainWindow(QMainWindow):
 
         # ---- 1. 加载配置 ----
         self._config: dict[str, Any] = load_config()
+        # 如果用户开启了日志模式，初始化日志系统
+        # 注意：init_log 多次调用只生效第一次（日志路径不变），
+        #       set_scopes 每次都会更新（支持热重载时调整记录范围）
+        if self._config.get("debug", {}).get("log_mode", False):
+            _log.init_log(get_project_root() / "logs")
+            _log.set_scopes(set(self._config.get("debug", {}).get("log_scope", ["status", "screenshots", "errors"])))
 
         # ---- 2. 初始化主题管理器 ----
         self._tm = ThemeManager(self._config)
@@ -999,7 +1006,7 @@ class MainWindow(QMainWindow):
         """
         if self._worker is not None:
             self._worker.stop()
-            self._worker.wait(500)
+            self._worker.wait(1000)
 
         self._reset_stage()                      # 重置状态机
         self._btn_start.setEnabled(True)
@@ -1020,6 +1027,7 @@ class MainWindow(QMainWindow):
         特殊处理: 如果消息表明 Master Duel 已关闭（"程序已关闭"），
                   自动恢复按钮状态，用户可以点击"启动"重新开始。
         """
+        _log.write("STATUS", msg)
         self._show_status(msg)
         if msg.startswith("程序已关闭"):
             self._btn_start.setEnabled(True)
@@ -1577,6 +1585,9 @@ class MainWindow(QMainWindow):
             4. 更新状态栏和信息标签
         """
         self._config = load_config()                       # 重新读取 config.toml
+        if self._config.get("debug", {}).get("log_mode", False):
+            _log.init_log(get_project_root() / "logs")
+            _log.set_scopes(set(self._config.get("debug", {}).get("log_scope", ["status", "screenshots", "errors"])))
         self._tm._config = self._config                    # 同步到 ThemeManager
         new_theme_name = self._config.get("appearance", {}).get("theme", "dark")
         init_active_csv_from_config()
@@ -1608,7 +1619,7 @@ class MainWindow(QMainWindow):
         worker_was_running = self._worker is not None
         if worker_was_running:
             self._worker.stop()
-            self._worker.wait(500)
+            self._worker.wait(1000)
             self._start_worker()
 
         self._show_status(
@@ -1751,7 +1762,7 @@ class MainWindow(QMainWindow):
             self._wait_timer = None
         if self._worker is not None:
             self._worker.stop()
-            self._worker.wait(500)           # 线程在 interval 秒内退出（默认 0.3s），500ms 绰绰有余
+            self._worker.wait(1000)          # 线程在 interval 秒内退出，1s 有充裕余量
         event.accept()
 
     def _restore_main_window_pos(self) -> None:

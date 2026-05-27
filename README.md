@@ -14,6 +14,7 @@
 - **主题系统** — 内置暗色/亮色/马卡龙三套主题，支持纯色和图片纹理，可自行制作
 - **悬浮统计窗** — 可拖拽的半透明悬浮窗，实时显示当前卡组关键数据，位置持久化
 - **版本更新检查** — 在"关于"弹窗中一键检测 GitHub 最新版本
+- **调试工具** — 可选的检测截图保存和日志模式，方便排查问题
 
 ## 截图
 
@@ -100,6 +101,9 @@ python main.py
 | `window.width` / `height` | 主窗口尺寸（像素） | `1300` / `700` |
 | `appearance.theme` | 界面主题，填写 `themes/` 下的文件夹名 | `"macaron"` |
 | `opponent_decks.presets` | 对方卡组预设列表 | `["炎兽", "闪刀姬", ...]` |
+| `debug.save_screenshots` | 保存检测截图（开启后写入 `screenshots/`） | `false` |
+| `debug.log_mode` | 日志模式（开启后写入 `logs/`） | `false` |
+| `debug.log_scope` | 日志记录范围：`status`/`screenshots`/`errors` | `["status","screenshots","errors"]` |
 | `recorder.daily_files` | 是否按日期分 CSV 文件 | `false` |
 | `clipboard.vertical_layout` | 剪贴板竖排模式 | `false` |
 | `clipboard.scope` | 复制范围（`"all"` / `"current"`） | `"all"` |
@@ -124,6 +128,8 @@ mdstats_py/
 ├── .app_state.json          # 列宽 / 悬浮窗位置持久化
 ├── resource/templates/      # 模板图片（按分辨率分目录）
 ├── csv/                     # 对战数据 CSV 文件
+├── screenshots/             # 调试截图输出（开启 save_screenshots 后自动生成）
+├── logs/                    # 日志文件输出（开启 log_mode 后自动生成）
 ├── themes/                  # 主题目录
 │   ├── README.md            # 主题制作指南
 │   ├── dark/                # 暗色沉浸主题
@@ -140,6 +146,7 @@ mdstats_py/
 │   ├── capture.py           # 窗口定位与截图（mss + pywin32）
 │   ├── config.py            # config.toml 配置加载
 │   ├── detector.py          # OpenCV 模板匹配识别
+│   ├── logger.py            # 日志模块（线程安全 + 作用域过滤）
 │   ├── recorder.py          # CSV 读写与统计计算
 │   └── stats_worker.py      # 后台识别线程（QThread）
 └── ui/

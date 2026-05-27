@@ -18,6 +18,8 @@ dist/
 
 # Data files
 csv/*.csv
+screenshots/
+logs/
 
 # OS
 Thumbs.db

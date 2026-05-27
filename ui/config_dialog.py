@@ -360,6 +360,50 @@ class ConfigDialog(QDialog):
         r2.addStretch()
         lo.addLayout(r2)
 
+        # ---- 保存检测截图 ----
+        # 独立开关，与日志模式无关。开启后每次检测到硬币/先后攻/胜负时
+        # 自动保存截图到 screenshots/ 目录。下一局开始时自动清除。
+        self._save_screenshots_cb = QCheckBox("保存检测截图")
+        self._save_screenshots_cb.setToolTip(
+            "开启后，每次检测到硬币输赢、先后攻、对局胜负时自动保存截图\n"
+            "到 screenshots/ 目录。下一局开始时自动清除上一局的截图。"
+        )
+        lo.addWidget(self._save_screenshots_cb)
+
+        # ---- 日志模式 ----
+        # 日志模式和截图保存是两个独立功能：
+        #   - 截图保存 = 保存 PNG 文件到 screenshots/
+        #   - 日志模式 = 写日志文件到 logs/，记录内容由下方三个子复选框控制
+        log_row = QHBoxLayout()
+        self._log_mode_cb = QCheckBox("日志模式")
+        self._log_mode_cb.setToolTip("将程序运行信息写入 logs/ 目录。勾选后选择记录范围。")
+        log_row.addWidget(self._log_mode_cb)
+        self._btn_open_logs = QPushButton("查看日志")
+        self._btn_open_logs.setFixedWidth(80)
+        self._btn_open_logs.clicked.connect(self._open_logs_dir)
+        self._btn_open_logs.setToolTip("在文件资源管理器中打开日志文件夹。")
+        log_row.addWidget(self._btn_open_logs)
+        log_row.addStretch()
+        lo.addLayout(log_row)
+
+        # 日志记录范围 — 三个子复选框，左侧缩进 24px 表示层级关系
+        # 日志模式关闭时自动变灰（_on_log_mode_toggled 控制）
+        indent = QVBoxLayout()
+        indent.setContentsMargins(24, 0, 0, 0)
+        self._log_scope_status = QCheckBox("状态栏消息")
+        self._log_scope_status.setToolTip("记录所有左下角状态栏的文字内容。")
+        indent.addWidget(self._log_scope_status)
+        self._log_scope_screenshots = QCheckBox("截图事件")
+        self._log_scope_screenshots.setToolTip("记录截图的保存、清除等操作。")
+        indent.addWidget(self._log_scope_screenshots)
+        self._log_scope_errors = QCheckBox("错误信息")
+        self._log_scope_errors.setToolTip("记录所有未捕获的异常和错误。")
+        indent.addWidget(self._log_scope_errors)
+        lo.addLayout(indent)
+
+        # 主开关切换时联动子复选框的启用/禁用状态
+        self._log_mode_cb.toggled.connect(self._on_log_mode_toggled)
+
         lo.addStretch()
         return w
 
@@ -766,6 +810,22 @@ class ConfigDialog(QDialog):
         self._interval.setValue(d.get("interval", 0.3))
         self._threshold.setValue(d.get("confidence_threshold", 0.8))
 
+        # ---- debug 段：调试与实验功能 ----
+        # 包含三个配置项：
+        #   save_screenshots (bool) — 保存检测截图
+        #   log_mode (bool)          — 日志模式主开关
+        #   log_scope (list[str])    — 日志记录范围
+        dbg = c.get("debug", {})
+        self._save_screenshots_cb.setChecked(dbg.get("save_screenshots", False))
+        self._log_mode_cb.setChecked(dbg.get("log_mode", False))
+        # log_scope 是 TOML 数组，转成集合后分别设置三个子复选框
+        scopes = set(dbg.get("log_scope", ["status", "screenshots", "errors"]))
+        self._log_scope_status.setChecked("status" in scopes)
+        self._log_scope_screenshots.setChecked("screenshots" in scopes)
+        self._log_scope_errors.setChecked("errors" in scopes)
+        # 根据日志模式的初始状态设置子复选框的启用/禁用
+        self._on_log_mode_toggled(dbg.get("log_mode", False))
+
         theme = c.get("appearance", {}).get("theme", "")
         idx = self._theme_combo.findText(theme)
         if idx >= 0:
@@ -865,6 +925,11 @@ class ConfigDialog(QDialog):
                 "interval": round(self._interval.value(), 1),
                 "confidence_threshold": round(self._threshold.value(), 2),
             },
+            "debug": {
+                "save_screenshots": self._save_screenshots_cb.isChecked(),
+                "log_mode": self._log_mode_cb.isChecked(),
+                "log_scope": self._get_log_scope(),
+            },
             "appearance": {
                 "theme": self._theme_combo.currentText(),
             },
@@ -931,6 +996,7 @@ class ConfigDialog(QDialog):
         r = data.get("recorder", {})
         cb = data.get("clipboard", {})
         fw = data.get("floating_window", {})
+        dbg = data.get("debug", {})
 
         lines: list[str] = [
             "# MD Stats 配置文件（由设置 GUI 生成，也可手动编辑）",
@@ -944,6 +1010,14 @@ class ConfigDialog(QDialog):
             "截图间隔（秒），推荐 0.3 ~ 1.0")
         _kv("confidence_threshold", d.get("confidence_threshold", 0.8),
             "匹配置信度阈值 (0.0~1.0)，推荐 0.75~0.90")
+
+        lines.extend(["", "# 调试与实验功能", "[debug]"])
+        _kv("save_screenshots", dbg.get("save_screenshots", False),
+            "检测到关键事件时保存截图到 screenshots/，下一局开始时自动清除")
+        _kv("log_mode", dbg.get("log_mode", False),
+            "开启日志模式：将运行信息写入 logs/ 目录")
+        _kv("log_scope", dbg.get("log_scope", ["status", "screenshots", "errors"]),
+            '日志记录范围："status"=状态栏消息, "screenshots"=截图事件, "errors"=错误信息')
 
         lines.extend(["", "[window]"])
         _kv("width", w.get("width", 1300), "主窗口宽度（像素）")
@@ -1005,6 +1079,48 @@ class ConfigDialog(QDialog):
     def _del_preset(self) -> None:
         for item in self._preset_list.selectedItems():
             self._preset_list.takeItem(self._preset_list.row(item))
+
+    # =========================================================================
+    # 日志
+    # =========================================================================
+
+    def _get_log_scope(self) -> list[str]:
+        """从三个子复选框构建 log_scope 列表，用于写入 config.toml。
+
+        TOML 中的 log_scope 是一个字符串列表，如 ["status", "screenshots", "errors"]。
+        这个方法把复选框状态转成对应的字符串列表。
+        """
+        scopes = []
+        if self._log_scope_status.isChecked():
+            scopes.append("status")
+        if self._log_scope_screenshots.isChecked():
+            scopes.append("screenshots")
+        if self._log_scope_errors.isChecked():
+            scopes.append("errors")
+        return scopes
+
+    def _on_log_mode_toggled(self, enabled: bool) -> None:
+        """日志模式开关切换时，联动启用/禁用三个子复选框。
+
+        为什么要禁用而不是隐藏？
+            隐藏会导致界面布局跳动，用户体验不好。用 setEnabled(False)
+            让复选框变灰但保持在原位，用户能清楚看到"这些选项在日志模式
+            关闭时不生效"。
+        """
+        for cb in (self._log_scope_status, self._log_scope_screenshots, self._log_scope_errors):
+            cb.setEnabled(enabled)
+
+    def _open_logs_dir(self) -> None:
+        """在 Windows 文件资源管理器中打开日志文件夹。
+
+        如果日志文件夹不存在（从未开启过日志模式），先创建空文件夹再打开，
+        避免 explorer 报错"路径不存在"。
+        """
+        import os
+        import subprocess
+        log_dir = get_project_root() / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        subprocess.Popen(["explorer", os.fspath(log_dir)])
 
     # =========================================================================
     # 背景绘制
