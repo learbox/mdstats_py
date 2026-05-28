@@ -193,22 +193,26 @@ class DualListWidget(QWidget):
         self._btn_r = QPushButton()
         self._btn_r.setIcon(self._make_arrow("right"))
         self._btn_r.setFixedSize(36, 28)
+        self._btn_r.setToolTip("添加到已选")
         self._btn_r.clicked.connect(self._move_right)
         mid.addWidget(self._btn_r)
         self._btn_l = QPushButton()
         self._btn_l.setIcon(self._make_arrow("left"))
         self._btn_l.setFixedSize(36, 28)
+        self._btn_l.setToolTip("移回可选")
         self._btn_l.clicked.connect(self._move_left)
         mid.addWidget(self._btn_l)
         mid.addSpacing(12)
         self._btn_u = QPushButton()
         self._btn_u.setIcon(self._make_arrow("up"))
         self._btn_u.setFixedSize(36, 28)
+        self._btn_u.setToolTip("上移")
         self._btn_u.clicked.connect(self._move_up)
         mid.addWidget(self._btn_u)
         self._btn_d = QPushButton()
         self._btn_d.setIcon(self._make_arrow("down"))
         self._btn_d.setFixedSize(36, 28)
+        self._btn_d.setToolTip("下移")
         self._btn_d.clicked.connect(self._move_down)
         mid.addWidget(self._btn_d)
         mid.addStretch()
@@ -326,6 +330,7 @@ class ConfigDialog(QDialog):
         self._tabs.addTab(self._make_clipboard_tab(), "剪贴板")
         self._tabs.addTab(self._make_float_tab(), "悬浮窗")
         self._tabs.addTab(self._make_data_tab(), "数据")
+        self._tabs.addTab(self._make_notification_tab(), "系统")
         outer.addWidget(self._tabs, 1)
         outer.addWidget(self._make_button_bar())
 
@@ -410,29 +415,20 @@ class ConfigDialog(QDialog):
         )
         lo.addWidget(self._save_screenshots_cb)
 
-        # ---- 系统通知 ----
-        self._notify_cb = QCheckBox("对局结束系统通知")
-        self._notify_cb.setToolTip(
-            "开启后，每局结束时弹出系统气泡通知，\n"
-            "显示硬币输赢（含段位升降）、先后手和胜负结果。"
-        )
-        lo.addWidget(self._notify_cb)
+        lo.addStretch()
+        return w
 
-        notify_row = QHBoxLayout()
-        notify_row.setContentsMargins(24, 0, 0, 0)
-        notify_row.addWidget(QLabel("显示时长:"))
-        self._notify_duration = QSpinBox()
-        self._notify_duration.setRange(1, 30)
-        self._notify_duration.setSuffix(" 秒")
-        self._notify_duration.setToolTip("气泡通知在屏幕上的停留时间。")
-        notify_row.addWidget(self._notify_duration)
-        notify_row.addStretch()
-        lo.addLayout(notify_row)
+    # =========================================================================
+    # Tab 2: 系统
+    # =========================================================================
+
+    def _make_notification_tab(self) -> QWidget:
+        w = QWidget()
+        lo = QVBoxLayout(w)
+        lo.setSpacing(12)
 
         # ---- 日志模式 ----
-        # 日志模式和截图保存是两个独立功能：
-        #   - 截图保存 = 保存 PNG 文件到 screenshots/
-        #   - 日志模式 = 写日志文件到 logs/，记录内容由下方三个子复选框控制
+        # 日志模式：写日志文件到 logs/，记录内容由下方三个子复选框控制
         log_row = QHBoxLayout()
         self._log_mode_cb = QCheckBox("日志模式")
         self._log_mode_cb.setToolTip("将程序运行信息写入 logs/ 目录。勾选后选择记录范围。")
@@ -445,8 +441,7 @@ class ConfigDialog(QDialog):
         log_row.addStretch()
         lo.addLayout(log_row)
 
-        # 日志记录范围 — 三个子复选框，左侧缩进 24px 表示层级关系
-        # 日志模式关闭时自动变灰（_on_log_mode_toggled 控制）
+        # 日志记录范围 — 三个子复选框，关闭日志模式时自动变灰
         indent = QVBoxLayout()
         indent.setContentsMargins(24, 0, 0, 0)
         self._log_scope_status = QCheckBox("状态栏消息")
@@ -463,11 +458,38 @@ class ConfigDialog(QDialog):
         # 主开关切换时联动子复选框的启用/禁用状态
         self._log_mode_cb.toggled.connect(self._on_log_mode_toggled)
 
+        # ---- 系统通知 ----
+        self._notify_cb = QCheckBox("对局结束系统通知")
+        self._notify_cb.setToolTip(
+            "开启后，每局结束时弹出系统气泡通知，\n"
+            "显示硬币输赢（含段位升降）、先后手和胜负结果。"
+        )
+        lo.addWidget(self._notify_cb)
+
+        dur_row = QHBoxLayout()
+        dur_row.setContentsMargins(24, 0, 0, 0)
+        dur_row.addWidget(QLabel("显示时长:"))
+        self._notify_duration = QSpinBox()
+        self._notify_duration.setRange(1, 30)
+        self._notify_duration.setSuffix(" 秒")
+        self._notify_duration.setToolTip("气泡通知在屏幕上的停留时间。")
+        dur_row.addWidget(self._notify_duration)
+        dur_row.addStretch()
+        lo.addLayout(dur_row)
+
+        # ---- 托盘 ----
+        self._tray_minimize_cb = QCheckBox("最小化到系统托盘")
+        self._tray_minimize_cb.setToolTip(
+            "开启后，最小化主窗口时隐藏到系统托盘（悬浮窗不受影响）。\n"
+            "右键托盘图标可还原窗口或退出程序。"
+        )
+        lo.addWidget(self._tray_minimize_cb)
+
         lo.addStretch()
         return w
 
     # =========================================================================
-    # Tab 2: 外观
+    # Tab 3: 外观
     # =========================================================================
 
     def _make_appearance_tab(self) -> QWidget:
@@ -738,6 +760,9 @@ class ConfigDialog(QDialog):
 
         g3 = QGroupBox("要复制的列")
         g3l = QVBoxLayout(g3)
+        hint_cb = QLabel("> 添加  < 移除  ^ 上移  v 下移  |  清空已选 = 使用默认项")
+        hint_cb.setStyleSheet("color: #888; font-size: 11px; background: transparent;")
+        g3l.addWidget(hint_cb)
         self._cb_dual = DualListWidget(self._ALL_KEYS, list(_DEFAULT_ROWS))
         g3l.addWidget(self._cb_dual)
         lo.addWidget(g3)
@@ -799,6 +824,9 @@ class ConfigDialog(QDialog):
 
         g = QGroupBox("显示的数据行")
         gl = QVBoxLayout(g)
+        hint_fw = QLabel("> 添加  < 移除  ^ 上移  v 下移  |  清空已选 = 使用默认项")
+        hint_fw.setStyleSheet("color: #888; font-size: 11px; background: transparent;")
+        gl.addWidget(hint_fw)
         self._fw_dual = DualListWidget(self._ALL_KEYS, list(_DEFAULT_ROWS))
         gl.addWidget(self._fw_dual)
         lo.addWidget(g)
@@ -836,8 +864,10 @@ class ConfigDialog(QDialog):
         # 统计表格显示列选择
         from src.recorder import STATS_COLUMNS
         g_stats = QGroupBox("统计表格显示的列")
-        g_stats.setToolTip("选择要在上方统计表格中显示的列。\n清空全部 = 显示所有列。")
         gl_stats = QVBoxLayout(g_stats)
+        hint = QLabel("> 添加  < 移除  ^ 上移  v 下移  |  清空已选 = 显示全部")
+        hint.setStyleSheet("color: #888; font-size: 11px; background: transparent;")
+        gl_stats.addWidget(hint)
         self._stats_dual = DualListWidget(list(STATS_COLUMNS), list(STATS_COLUMNS))
         gl_stats.addWidget(self._stats_dual)
         lo.addWidget(g_stats)
@@ -896,6 +926,7 @@ class ConfigDialog(QDialog):
 
         self._notify_cb.setChecked(c.get("notification", {}).get("enabled", False))
         self._notify_duration.setValue(c.get("notification", {}).get("duration", 5))
+        self._tray_minimize_cb.setChecked(c.get("notification", {}).get("minimize_to_tray", False))
 
         theme = c.get("appearance", {}).get("theme", "")
         idx = self._theme_combo.findText(theme)
@@ -1063,6 +1094,7 @@ class ConfigDialog(QDialog):
             "notification": {
                 "enabled": self._notify_cb.isChecked(),
                 "duration": self._notify_duration.value(),
+                "minimize_to_tray": self._tray_minimize_cb.isChecked(),
             },
         }
 
@@ -1160,6 +1192,8 @@ class ConfigDialog(QDialog):
             "对局结束时弹出系统气泡通知")
         _kv("duration", ntfy.get("duration", 5),
             "通知显示持续时间（秒）")
+        _kv("minimize_to_tray", ntfy.get("minimize_to_tray", False),
+            "最小化时隐藏到系统托盘（而非任务栏）")
 
         lines.extend(["", "# 悬浮统计窗", "[floating_window]"])
         _kv("use_theme_bg", fw.get("use_theme_bg", False),

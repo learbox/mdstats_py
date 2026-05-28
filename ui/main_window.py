@@ -658,7 +658,7 @@ class MainWindow(QMainWindow):
 
         # 托盘右键菜单
         tray_menu = QMenu()
-        tray_menu.addAction("显示窗口", self.showNormal)
+        tray_menu.addAction("显示窗口", self._show_from_tray)
         tray_menu.addAction("退出程序", self._quit_app)
         self._tray.setContextMenu(tray_menu)
 
@@ -1810,6 +1810,22 @@ class MainWindow(QMainWindow):
     # =========================================================================
     # 窗口关闭事件
     # =========================================================================
+
+    def _show_from_tray(self) -> None:
+        """托盘右键"显示窗口"：恢复并置顶。"""
+        self.showNormal()
+        self.activateWindow()
+        self.raise_()
+
+    def changeEvent(self, event: Any) -> None:
+        """窗口状态变化时触发。最小化时若开启了托盘隐藏，则隐藏窗口。"""
+        from PySide6.QtCore import QEvent
+        if event.type() == QEvent.Type.WindowStateChange:
+            if self.isMinimized() and self._config.get("notification", {}).get("minimize_to_tray", False):
+                self.hide()
+                event.ignore()
+                return
+        super().changeEvent(event)
 
     def _quit_app(self) -> None:
         """托盘右键退出：触发正常的窗口关闭流程。"""

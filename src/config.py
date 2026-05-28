@@ -155,6 +155,8 @@ log_scope = ["status", "screenshots", "errors"]
 enabled = false
 # 通知显示持续时间（秒）
 duration = 5
+# 最小化时隐藏到系统托盘（而非任务栏）
+minimize_to_tray = false
 
 # 悬浮统计窗
 [floating_window]

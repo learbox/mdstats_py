@@ -15,6 +15,7 @@
 - **悬浮统计窗** — 可拖拽的半透明悬浮窗，实时显示当前卡组关键数据，位置持久化
 - **版本更新检查** — 在"关于"弹窗中一键检测 GitHub 最新版本
 - **调试工具** — 可选的检测截图保存和日志模式，方便排查问题
+- **系统通知** — 对局结束时弹出气泡通知，支持最小化到系统托盘
 
 ## 截图
 
@@ -111,6 +112,9 @@ python main.py
 | `clipboard.vertical_layout` | 剪贴板竖排模式 | `false` |
 | `clipboard.scope` | 复制范围（`"all"` / `"current"`） | `"all"` |
 | `floating_window.width` / `height` | 悬浮窗尺寸 | `250` / `300` |
+| `notification.enabled` | 对局结束系统气泡通知 | `false` |
+| `notification.duration` | 通知显示时长（秒） | `5` |
+| `notification.minimize_to_tray` | 最小化到系统托盘 | `false` |
 | `floating_window.bg_color` | 悬浮窗背景色 | `#BDEF0A` |
 | `floating_window.opacity` | 悬浮窗不透明度 (0-100) | `50` |
 | `floating_window.rows` | 悬浮窗显示数据行 | 8 项默认 |

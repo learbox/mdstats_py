@@ -61,6 +61,8 @@ columns = ["卡组", "对局数", "胜/负", "赢/输硬币", "赢硬币概率",
 enabled = true
 # 通知显示持续时间（秒）
 duration = 2
+# 最小化时隐藏到系统托盘（而非任务栏）
+minimize_to_tray = false
 
 # 悬浮统计窗
 [floating_window]
