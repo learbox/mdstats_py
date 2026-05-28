@@ -12,7 +12,7 @@ confidence_threshold = 0.8
 # 调试与实验功能
 [debug]
 # 检测到关键事件时保存截图到 screenshots/，下一局开始时自动清除
-save_screenshots = true
+save_screenshots = false
 # 开启日志模式：将运行信息写入 logs/ 目录
 log_mode = false
 # 日志记录范围："status"=状态栏消息, "screenshots"=截图事件, "errors"=错误信息
@@ -60,7 +60,7 @@ columns = ["卡组", "对局数", "胜/负", "赢/输硬币", "赢硬币概率",
 # 对局结束时弹出系统气泡通知
 enabled = true
 # 通知显示持续时间（秒）
-duration = 2
+duration = 1
 # 最小化时隐藏到系统托盘（而非任务栏）
 minimize_to_tray = false
 

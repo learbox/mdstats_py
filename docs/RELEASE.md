@@ -54,7 +54,7 @@ git push origin main --tags
 git log v上一版本..v新版本 --oneline
 ```
 
-按以下模板整理：
+按以下 Markdown 模板整理（直接粘贴到 GitHub Release 输入框，支持 Markdown 渲染）：
 
 ```
 ## 新功能
