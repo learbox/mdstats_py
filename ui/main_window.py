@@ -1114,20 +1114,26 @@ class MainWindow(QMainWindow):
         add_record(coin_win=self._coin_cache, turn=self._turn_cache,
                    result=result, deck=self._deck_input.text().strip(),
                    rank=self._rank_cache)
+
+        # 先提取通知所需信息，再 reset（reset 会清空缓存）
+        coin_cache = self._coin_cache
+        turn_cache = self._turn_cache
+        rank_cache = self._rank_cache
+        result_text = "胜" if result == "win" else "负"
+
         self._reset_stage()
         self._reload_tables()
-        result_text = "胜" if result == "win" else "负"
         self._show_status(f"已记录: {result_text} — 等待下一局…")
 
-        # 系统气泡通知
+        # 系统气泡通知（在 reset 之后弹，但内容用之前缓存的值）
         if self._config.get("notification", {}).get("enabled", False):
-            coin_text = "赢硬币" if self._coin_cache == "win" else "输硬币"
+            coin_text = "赢硬币" if coin_cache == "win" else "输硬币"
             rank_text = ""
-            if self._rank_cache == "up":
+            if rank_cache == "up":
                 rank_text = "（升段局）"
-            elif self._rank_cache == "down":
+            elif rank_cache == "down":
                 rank_text = "（降段局）"
-            turn_text = "先攻" if self._turn_cache == "first" else "后攻"
+            turn_text = "先攻" if turn_cache == "first" else "后攻"
             msg = f"{coin_text}{rank_text} → {turn_text} → {result_text}"
             duration = self._config.get("notification", {}).get("duration", 5) * 1000
             self._tray.showMessage("MD Stats", msg, QSystemTrayIcon.MessageIcon.Information, duration)
