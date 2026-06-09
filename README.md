@@ -60,7 +60,7 @@ pip install mss numpy opencv-python pyside6 pywin32
 
 ## 准备模板图片
 
-在 `resource/templates/` 下按游戏分辨率创建子目录，放入 6 张模板截图：
+在 `resource/templates/` 下按游戏分辨率创建子目录，放入模板截图（必选 6 张 + 可选 2 张段位检测）：
 
 ```
 resource/templates/
@@ -176,6 +176,10 @@ mdstats_py/
 
 - 代码辅助：Claude Code (Anthropic)、GLM-5.1 (智谱)、DeepSeek-V4-Pro
 - 主题图片资源由 GPT-5.5 生成
+
+## 免责声明
+
+游戏王为 KONAMI 公司的注册商标。本工具为非官方玩家自制辅助，与 KONAMI 无任何关联，也未经其认可。
 
 ## 许可证
 
