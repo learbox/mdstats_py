@@ -821,9 +821,12 @@ class MainWindow(QMainWindow):
         # ---- 16. 记录表格编辑 → CSV 同步 ----
         self._record_table.cellChanged.connect(self._on_record_cell_changed)
 
-        # QSplitter 拉伸比例（统计表格 2 : 记录表格 3）
+        # QSplitter 默认比例（统计表格 2 : 记录表格 3）
         self._splitter.setStretchFactor(0, 2)
         self._splitter.setStretchFactor(1, 3)
+        saved_splitter = self._read_app_state().get("splitter")
+        if saved_splitter:
+            self._splitter.setSizes(saved_splitter)
 
         # ---- 17. 状态栏（从 .ui 文件加载的控件） ----
         self._status_frame = _require_widget(content.findChild(QFrame, "customStatusBar"), "customStatusBar")
@@ -1855,7 +1858,8 @@ class MainWindow(QMainWindow):
         data["stats"] = [self._stats_table.columnWidth(c)
                          for c in range(self._stats_table.columnCount() - 1)]
         data["record"] = [self._record_table.columnWidth(c)
-                          for c in range(self._record_table.columnCount() - 1)]
+                          for c in range(1, self._record_table.columnCount() - 1)]  # 跳过隐藏列0
+        data["splitter"] = self._splitter.sizes()
         self._write_app_state(data)
 
         # ---- 停止所有定时器和工作线程 ----
