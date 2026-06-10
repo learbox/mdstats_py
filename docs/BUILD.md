@@ -56,6 +56,7 @@ cp -r resource dist/release/
 cp config.toml dist/release/
 cp .app_state.json dist/release/
 cp docs/README_release.md dist/release/README.md
+cp LICENSE dist/release/
 ```
 
 ### 5. 打包 ZIP
