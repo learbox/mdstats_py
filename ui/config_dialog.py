@@ -830,21 +830,34 @@ class ConfigDialog(QDialog):
         lo = QVBoxLayout(w)
         lo.setSpacing(8)
 
+        # ---- 复制格式 ----
+        # 两种格式二选一，用 QButtonGroup 保证互斥
         g1 = QGroupBox("复制格式")
         g1l = QVBoxLayout(g1)
         self._cb_tsv = QRadioButton("横排 TSV")
+        self._cb_tsv.setToolTip(
+            "制表符分隔值格式，可直接粘贴到 Excel / Google Sheets。\n"
+            "每行一条记录，各字段用 Tab 分隔。"
+        )
         self._cb_vert = QRadioButton("竖排 key: value")
-        bg = QButtonGroup(self)
-        bg.addButton(self._cb_tsv, 0)
-        bg.addButton(self._cb_vert, 1)
+        self._cb_vert.setToolTip(
+            "每行一个字段，格式为「字段名: 值」，适合文本聊天窗口分享。"
+        )
+        bg = QButtonGroup(self)  # 互斥组：同时只能选中一个
+        bg.addButton(self._cb_tsv, 0)   # id=0 → 横排
+        bg.addButton(self._cb_vert, 1)   # id=1 → 竖排
         g1l.addWidget(self._cb_tsv)
         g1l.addWidget(self._cb_vert)
         lo.addWidget(g1)
 
+        # ---- 复制范围 ----
+        # 控制点击主窗口"复制"按钮时复制哪些卡组的数据
         g2 = QGroupBox("复制范围")
         g2l = QVBoxLayout(g2)
         self._cb_all = QRadioButton("全部卡组")
+        self._cb_all.setToolTip("复制所有卡组的统计数据。")
         self._cb_curr = QRadioButton("仅当前卡组")
+        self._cb_curr.setToolTip("只复制当前下拉框选中的那个卡组的数据。")
         bg2 = QButtonGroup(self)
         bg2.addButton(self._cb_all, 0)
         bg2.addButton(self._cb_curr, 1)
@@ -852,11 +865,14 @@ class ConfigDialog(QDialog):
         g2l.addWidget(self._cb_curr)
         lo.addWidget(g2)
 
+        # ---- 要复制的列 ----
+        # 用 DualListWidget 让用户选择复制哪些字段列，并可调整顺序
         g3 = QGroupBox("要复制的列")
         g3l = QVBoxLayout(g3)
         hint_cb = QLabel("> 添加  < 移除  ^ 上移  v 下移  |  清空已选 = 使用默认项")
         hint_cb.setStyleSheet("color: #888; font-size: 11px; background: transparent;")
         g3l.addWidget(hint_cb)
+        # 左侧可选 = _ALL_KEYS（全部字段），右侧已选 = _DEFAULT_ROWS（默认 8 项）
         self._cb_dual = DualListWidget(self._ALL_KEYS, list(_DEFAULT_ROWS))
         g3l.addWidget(self._cb_dual)
         lo.addWidget(g3)
@@ -873,11 +889,13 @@ class ConfigDialog(QDialog):
         lo = QVBoxLayout(w)
         lo.setSpacing(8)
 
+        # ---- 尺寸 ----
         sr = QHBoxLayout()
         sr.addWidget(QLabel("宽度:"))
         self._fw_w = QSpinBox()
         self._fw_w.setRange(100, 1000)
         self._fw_w.setSuffix(" px")
+        self._fw_w.setToolTip("悬浮窗的固定宽度。")
         sr.addWidget(self._fw_w)
         sr.addWidget(QLabel("高度:"))
         self._fw_h = QSpinBox()
@@ -888,36 +906,45 @@ class ConfigDialog(QDialog):
         sr.addStretch()
         lo.addLayout(sr)
 
+        # ---- 背景色 + 透明度 ----
         br = QHBoxLayout()
         br.addWidget(QLabel("背景色:"))
-        self._fw_bg = ColorButton(QColor("#98d4bb"))
+        self._fw_bg = ColorButton(QColor("#98d4bb"))  # 默认薄荷绿
+        self._fw_bg.setToolTip("悬浮窗背景颜色，点击色块可更换。")
         br.addWidget(self._fw_bg)
         br.addWidget(QLabel("透明度:"))
         self._fw_op = QSlider(Qt.Orientation.Horizontal)
-        self._fw_op.setRange(0, 100)
+        self._fw_op.setRange(0, 100)   # 0 = 全透明，100 = 不透明
         self._fw_op.setFixedWidth(150)
+        self._fw_op.setToolTip("0 = 全透明（不可见），100 = 不透明。OBS 颜色键捕获需要较低透明度。")
         br.addWidget(self._fw_op)
-        self._fw_opl = QLabel("50%")
+        self._fw_opl = QLabel("50%")   # 滑块旁显示当前百分比
         self._fw_op.valueChanged.connect(lambda v: self._fw_opl.setText(f"{v}%"))
         br.addWidget(self._fw_opl)
         br.addStretch()
         lo.addLayout(br)
 
+        # ---- 文字样式：颜色 + 字号 + 字体 ----
         tr = QHBoxLayout()
         tr.addWidget(QLabel("文字颜色:"))
-        self._fw_tc = ColorButton(QColor("#000000"))
+        self._fw_tc = ColorButton(QColor("#000000"))  # 默认黑色
+        self._fw_tc.setToolTip("悬浮窗内文字的颜色。")
         tr.addWidget(self._fw_tc)
         tr.addWidget(QLabel("字号:"))
         self._fw_fs = QSpinBox()
         self._fw_fs.setRange(8, 72)
+        self._fw_fs.setToolTip("文字大小（像素）。")
         tr.addWidget(self._fw_fs)
         tr.addWidget(QLabel("字体:"))
-        self._fw_ff = QFontComboBox()
+        self._fw_ff = QFontComboBox()  # 列出系统已安装的所有字体
         self._fw_ff.setMinimumWidth(160)
+        self._fw_ff.setToolTip("悬浮窗内文字使用的字体。")
         tr.addWidget(self._fw_ff)
         tr.addStretch()
         lo.addLayout(tr)
 
+        # ---- 显示的数据行 ----
+        # 与剪贴板列选择类似，用 DualListWidget 选择悬浮窗要展示哪些统计行
         g = QGroupBox("显示的数据行")
         gl = QVBoxLayout(g)
         hint_fw = QLabel("> 添加  < 移除  ^ 上移  v 下移  |  清空已选 = 使用默认项")
@@ -927,6 +954,7 @@ class ConfigDialog(QDialog):
         gl.addWidget(self._fw_dual)
         lo.addWidget(g)
 
+        # ---- 主题背景图开关 ----
         self._use_theme_bg = QCheckBox("使用主题背景图")
         self._use_theme_bg.setToolTip(
             "勾选后优先使用主题文件夹中的 float_bg 图片。\n"
@@ -934,6 +962,7 @@ class ConfigDialog(QDialog):
         )
         lo.addWidget(self._use_theme_bg)
 
+        # ---- OBS 捕获模式 ----
         self._obs_mode_cb = QCheckBox("OBS 捕获模式（悬浮窗显示任务栏图标）")
         self._obs_mode_cb.setToolTip(
             "开启后悬浮窗显示任务栏图标，OBS 窗口捕获可以正常识别。\n"
@@ -941,6 +970,7 @@ class ConfigDialog(QDialog):
         )
         lo.addWidget(self._obs_mode_cb)
 
+        # ---- 底部状态栏 ----
         self._show_status_cb = QCheckBox("底部显示检测状态")
         self._show_status_cb.setToolTip("在悬浮窗最底部显示当前检测到的硬币/先后攻/胜负。")
         lo.addWidget(self._show_status_cb)
@@ -957,39 +987,57 @@ class ConfigDialog(QDialog):
         lo = QVBoxLayout(w)
         lo.setSpacing(8)
 
+        # ---- 对方卡组预设 ----
+        # 预设列表会出现在主窗口的"对方卡组"下拉框中，方便快速选择
         g = QGroupBox("对方卡组预设")
         gl = QVBoxLayout(g)
         self._preset_list = QListWidget()
+        self._preset_list.setToolTip("已有的卡组预设。选中后可删除。")
         gl.addWidget(self._preset_list)
 
+        # 添加/删除按钮行
         ar = QHBoxLayout()
         self._preset_input = QLineEdit()
         self._preset_input.setPlaceholderText("输入新卡组名…")
+        self._preset_input.setToolTip("输入卡组名称后点击「添加」，或按 Enter 添加。")
         ar.addWidget(self._preset_input)
         ba = QPushButton("添加")
         ba.clicked.connect(self._add_preset)
+        ba.setToolTip("将输入框中的文本添加到预设列表（重复项自动跳过）。")
         ar.addWidget(ba)
         bd = QPushButton("删除选中")
         bd.clicked.connect(self._del_preset)
+        bd.setToolTip("删除列表中当前选中的预设项。")
         ar.addWidget(bd)
         ar.addStretch()
         gl.addLayout(ar)
         lo.addWidget(g)
 
-        # 统计表格显示列选择
-        from src.recorder import STATS_COLUMNS
+        # ---- 统计表格显示列选择 ----
+        # 控制主窗口右侧统计表格显示哪些列，用 DualListWidget 选择和排序
+        from src.recorder import STATS_COLUMNS  # 延迟导入，避免循环依赖
         g_stats = QGroupBox("统计表格显示的列")
         gl_stats = QVBoxLayout(g_stats)
         hint = QLabel("> 添加  < 移除  ^ 上移  v 下移  |  清空已选 = 显示全部")
         hint.setStyleSheet("color: #888; font-size: 11px; background: transparent;")
         gl_stats.addWidget(hint)
+        # 默认全部列都显示，所以左右初始值相同
         self._stats_dual = DualListWidget(list(STATS_COLUMNS), list(STATS_COLUMNS))
         gl_stats.addWidget(self._stats_dual)
         lo.addWidget(g_stats)
 
+        # ---- 存储选项 ----
         self._daily_files = QCheckBox("按日期分文件存储 CSV")
+        self._daily_files.setToolTip(
+            "开启后每天创建一个独立 CSV 文件（如 2026-06-12.csv），\n"
+            "关闭则所有数据写入同一个 stats.csv 文件。"
+        )
         lo.addWidget(self._daily_files)
         self._remember_deck = QCheckBox("启动时自动填入上次使用的卡组")
+        self._remember_deck.setToolTip(
+            "开启后程序启动时自动把上次使用的卡组名填入下拉框，\n"
+            "免去每次手动选择的麻烦。"
+        )
         lo.addWidget(self._remember_deck)
         lo.addStretch()
         return w
@@ -1020,10 +1068,11 @@ class ConfigDialog(QDialog):
     def _load_from_config(self) -> None:
         """从 config 字典读取所有配置项的值，填入各标签页的控件中。
 
-                在弹窗创建完成后调用一次，确保控件显示的值与当前配置一致。
-                """
+        在弹窗创建完成后调用一次，确保控件显示的值与当前配置一致。
+        """
         c = self._config
 
+        # ---- 识别 ----
         d = c.get("detection", {})
         self._interval.setValue(d.get("interval", 0.3))
         self._threshold.setValue(d.get("confidence_threshold", 0.8))
@@ -1036,10 +1085,11 @@ class ConfigDialog(QDialog):
         dbg = c.get("debug", {})
         self._save_screenshots_cb.setChecked(dbg.get("save_screenshots", False))
         self._auto_clear_cb.setChecked(dbg.get("auto_clear_screenshots", True))
+        # "自动清除"子复选框的启用状态跟随主开关
         self._auto_clear_cb.setEnabled(dbg.get("save_screenshots", False))
         hk_on = dbg.get("hotkey_enabled", False)
         self._hk_enabled.setChecked(hk_on)
-        self._on_hk_enabled_toggled(hk_on)
+        self._on_hk_enabled_toggled(hk_on)  # 联动启用/禁用热键输入框
         self._hk_snapshot.setText(dbg.get("snapshot_hotkey", "Ctrl+Shift+S"))
         self._hk_periodic.setText(dbg.get("periodic_hotkey", "Ctrl+Shift+D"))
         self._hk_interval.setValue(dbg.get("periodic_interval", 0.5))
@@ -1052,67 +1102,84 @@ class ConfigDialog(QDialog):
         # 根据日志模式的初始状态设置子复选框的启用/禁用
         self._on_log_mode_toggled(dbg.get("log_mode", False))
 
-        self._notify_cb.setChecked(c.get("notification", {}).get("enabled", False))
-        self._notify_duration.setValue(c.get("notification", {}).get("duration", 5))
+        # ---- 通知与托盘 ----
         n = c.get("notification", {})
+        self._notify_cb.setChecked(n.get("enabled", False))
+        self._notify_duration.setValue(n.get("duration", 5))
         self._tray_minimize_cb.setChecked(n.get("minimize_to_tray", False))
         self._obs_mode_cb.setChecked(n.get("obs_mode", False))
 
+        # ---- 外观 ----
         theme = c.get("appearance", {}).get("theme", "")
         idx = self._theme_combo.findText(theme)
         if idx >= 0:
             self._theme_combo.setCurrentIndex(idx)
+        # 窗口尺寸
         wd = c.get("window", {})
         self._win_width.setValue(wd.get("width", 1300))
         self._win_height.setValue(wd.get("height", 700))
 
+        # ---- 剪贴板 ----
         cb = c.get("clipboard", {})
+        # 复制格式：vertical_layout=True → 竖排，否则横排
         if cb.get("vertical_layout", False):
             self._cb_vert.setChecked(True)
         else:
             self._cb_tsv.setChecked(True)
+        # 复制范围："current" → 仅当前卡组，其余 → 全部
         if cb.get("scope", "all") == "current":
             self._cb_curr.setChecked(True)
         else:
             self._cb_all.setChecked(True)
+        # 列选择：如果用户自定义过列，需要替换默认的 DualListWidget
         saved_cols = cb.get("columns")
         if saved_cols:
             old = self._cb_dual
             self._cb_dual = DualListWidget(self._ALL_KEYS, list(saved_cols))
             self._replace_in_layout(self._tabs.widget(2), old, self._cb_dual)
 
+        # ---- 悬浮窗 ----
         fw = c.get("floating_window", {})
         self._fw_w.setValue(fw.get("width", 250))
         self._fw_h.setValue(fw.get("height", 300))
+        # 背景色：#RRGGBB → 拆分 RGB 分量 → 构造 QColor
         bg = fw.get("bg_color", "#98d4bb")
         r, g, b = int(bg[1:3], 16), int(bg[3:5], 16), int(bg[5:7], 16)
         self._fw_bg.set_color(QColor(r, g, b))
+        # 透明度滑块
         v = fw.get("opacity", 50)
         self._fw_op.setValue(v)
         self._fw_opl.setText(f"{v}%")  # 显式更新 label（setValue 在值不变时不触发信号）
+        # 文字颜色：同背景色的 #RRGGBB 解析方式
         tc = fw.get("text_color", "#000000")
         r2, g2, b2 = int(tc[1:3], 16), int(tc[3:5], 16), int(tc[5:7], 16)
         self._fw_tc.set_color(QColor(r2, g2, b2))
+        # 字号
         self._fw_fs.setValue(fw.get("font_size", 20))
+        # 字体：在下拉框中查找匹配项并选中
         ff = fw.get("font_family", "")
         if ff:
             idx = self._fw_ff.findText(ff)
             if idx >= 0:
                 self._fw_ff.setCurrentIndex(idx)
+        # 行选择：如果用户自定义过行，替换默认的 DualListWidget
         saved_rows = fw.get("rows")
         if saved_rows:
             old = self._fw_dual
             self._fw_dual = DualListWidget(self._ALL_KEYS, list(saved_rows))
             self._replace_in_layout(self._tabs.widget(3), old, self._fw_dual)
-
+        # 开关类选项
         self._use_theme_bg.setChecked(fw.get("use_theme_bg", False))
         self._show_status_cb.setChecked(fw.get("show_status", False))
 
+        # ---- 数据 ----
+        # 对方卡组预设列表
         presets = c.get("opponent_decks", {}).get("presets", [])
         self._preset_list.clear()
         for p in presets:
             if p.strip():
                 self._preset_list.addItem(p.strip())
+        # 存储选项
         self._daily_files.setChecked(
             c.get("recorder", {}).get("daily_files", False)
         )
@@ -1120,7 +1187,7 @@ class ConfigDialog(QDialog):
             c.get("recorder", {}).get("remember_last_deck", False)
         )
 
-        # 统计表格列选择
+        # 统计表格列选择：如果用户自定义过列，替换默认的 DualListWidget
         saved_stats = c.get("stats", {}).get("columns")
         if saved_stats:
             from src.recorder import STATS_COLUMNS

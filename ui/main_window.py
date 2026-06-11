@@ -1309,20 +1309,23 @@ class MainWindow(QMainWindow):
     def _on_toggle_float(self) -> None:
         """打开/关闭悬浮统计窗。"""
         if self._float_window is not None:
-            # 关闭悬浮窗
+            # ---- 关闭悬浮窗 ----
             self._save_float_window_pos()
             self._float_window.close()
             self._float_window = None
             self._btn_float.setText("悬浮窗")
             return
 
-        # 打开悬浮窗
+        # ---- 打开悬浮窗 ----
         cfg = self._config.get("floating_window", {})
-        rows = cfg.get("rows")  # 空列表或 None 都视为使用默认
+        rows = cfg.get("rows")  # 用户自定义行；空列表或 None → FloatingWindow 内部使用默认行
         self._float_window = FloatingWindow(rows=rows if rows else None)
+        # 如果开启了"使用主题背景图"且主题有背景资源，取主题的 float_bg 路径
         float_bg = None
         if cfg.get("use_theme_bg", False) and self._tm.pixmap_paths:
             float_bg = self._tm.pixmap_paths.get("__float_bg__")
+        # 先 update_style（设置样式 + resize），再 enable_status
+        # 这样 update_style 的 resize 能正确计算内容高度
         self._float_window.update_style(cfg, float_bg_path=float_bg)
         self._float_window.enable_status(cfg.get("show_status", False))
         self._refresh_float_window()                   # 填入当前统计数据
@@ -1432,7 +1435,6 @@ class MainWindow(QMainWindow):
             matched = [s for s in stats if s.get("卡组") == deck_name]
             stats = matched if matched else stats
         # all 模式但只有一个卡组 → 去掉合计行，等同于 current
-        # 只有一个卡组时去掉合计行
         actual_decks = [s for s in stats if s.get("卡组") != "合计"]
         if scope == "all" and len(actual_decks) <= 1:
             stats = actual_decks
@@ -1486,12 +1488,21 @@ class MainWindow(QMainWindow):
             pass  # 打开失败时静默忽略
 
     def _on_settings(self) -> None:
-        """打开图形化设置弹窗，确定后自动写配置 + 重载。"""
+        """打开图形化设置弹窗，确定后自动写配置 + 重载。
+
+        从当前主题中提取设置弹窗所需的视觉参数：
+            - bg_path:     主题背景图路径（弹窗会以此为背景）
+            - close_hover: 关闭按钮悬停色（标题栏配置中的 btn_close_hover）
+            - widget_bg:   控件背景色（半透明面板的底色）
+            - main_bg:     弹窗主背景色（无背景图时的底色）
+        """
         from ui.config_dialog import ConfigDialog
+        # 背景图：部分主题（如 dark）提供 settings_bg 图片作为弹窗背景
         bg_path = None
-        close_hover = "#e74c3c"
         if self._tm.pixmap_paths:
             bg_path = self._tm.pixmap_paths.get("__settings_bg__")
+        # 关闭按钮悬停色：默认红色，主题可覆盖
+        close_hover = "#e74c3c"
         if self._tm.titlebar_cfg:
             close_hover = self._tm.titlebar_cfg.get("btn_close_hover", close_hover)
         dialog = ConfigDialog(self._config, self,
@@ -1738,18 +1749,22 @@ class MainWindow(QMainWindow):
 
     def _real_close(self) -> None:
         """绕过托盘模式强制退出：保存状态 → 停止线程 → 退出。"""
+        # ---- 1. 持久化所有运行时状态到 .app_state.json ----
         data = read_app_state()
         p = self.pos()
         data["main_pos"] = [p.x(), p.y()]
         if self._float_window is not None:
             fp = self._float_window.pos()
             data["float_pos"] = [fp.x(), fp.y()]
+        # 保存列宽（跳过 stats 最后一列 stretch、record 列0隐藏列和最后一列 stretch）
         data["stats"] = [self._stats_table.columnWidth(c)
                          for c in range(self._stats_table.columnCount() - 1)]
         data["record"] = [self._record_table.columnWidth(c)
                           for c in range(1, self._record_table.columnCount() - 1)]
         data["splitter"] = self._splitter.sizes()
         write_app_state(data)
+
+        # ---- 2. 停止所有定时器和后台线程 ----
         if self._info_timer is not None:
             self._info_timer.stop()
         if self._wait_timer is not None:
@@ -1757,6 +1772,8 @@ class MainWindow(QMainWindow):
         if self._worker is not None:
             self._worker.stop()
             self._worker.wait(1000)
+
+        # ---- 3. 注销全局热键并退出事件循环 ----
         self._snapshot_ctrl.unregister_hotkeys()
         QApplication.quit()
 
