@@ -101,6 +101,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
 )
 
+from src.app_state import read_app_state, write_app_state, parse_pos, APP_STATE_DEFAULTS
 from src.config import get_project_root, load_config
 from src import logger as _log
 from src.recorder import (
@@ -117,15 +118,10 @@ from src.recorder import (
 # capture / stats_worker 延迟导入（启动时才需要 OpenCV，避免程序启动等待 ~260ms）
 from src.theme_loader import Theme, load_theme
 from ui.floating_window import FloatingWindow, _ROW_KEY_MAP
-from ui.hotkey_listener import HotkeyListener
+from src.hotkey_listener import HotkeyListener, parse_hotkey
 from ui.theme_manager import ThemeManager, ThemeWidgets
 from ui.titlebar import TitleBar
 
-# config.toml 的绝对路径（开发模式: 项目根，打包模式: EXE 所在目录）
-_CONFIG_PATH = get_project_root() / "config.toml"
-
-# 列宽 / 悬浮窗位置等状态持久化文件
-_APP_STATE_PATH = get_project_root() / ".app_state.json"
 _RESOURCE_DIR = get_project_root() / "resource"
 
 _T = TypeVar("_T")
@@ -492,115 +488,6 @@ class MainWindow(QMainWindow):
         super().mouseDoubleClickEvent(event)
 
     # =========================================================================
-    # 颜色工具方法（用于手动按钮的动态变色）
-    #
-    # 手动按钮的颜色随对局阶段切换:
-    #   阶段0（硬币）→ 橙色  阶段1（先后攻）→ 蓝色  阶段2（胜负）→ 绿/红
-    #
-    # _btn_style 生成完整的按钮 QSS（含 hover/pressed/disabled 状态），
-    # 用于 setStyleSheet() 直接覆盖按钮外观。
-    # =========================================================================
-
-    @staticmethod
-    def _parse_hex(hex_color: str) -> tuple[int, int, int]:
-        """将 #RRGGBB 解析为 (r, g, b) 整数元组。"""
-        return int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
-
-    @classmethod
-    def _lighter(cls, hex_color: str, factor: float = 0.25) -> str:
-        """将颜色向白色方向提亮，用于 hover 状态。"""
-        r, g, b = cls._parse_hex(hex_color)
-        r = min(255, int(r + (255 - r) * factor))
-        g = min(255, int(g + (255 - g) * factor))
-        b = min(255, int(b + (255 - b) * factor))
-        return f"#{r:02x}{g:02x}{b:02x}"
-
-    @classmethod
-    def _darker(cls, hex_color: str, factor: float = 0.15) -> str:
-        """将颜色向黑色方向加深，用于 pressed 状态。"""
-        r, g, b = cls._parse_hex(hex_color)
-        r = max(0, int(r * (1 - factor)))
-        g = max(0, int(g * (1 - factor)))
-        b = max(0, int(b * (1 - factor)))
-        return f"#{r:02x}{g:02x}{b:02x}"
-
-    @classmethod
-    def _readable_on(cls, hex_color: str) -> str:
-        """根据底色亮度自动选择易读的文字色: 浅底用深紫灰，深底用白。
-
-        luma 公式: 0.299×R + 0.587×G + 0.114×B（人眼对绿色最敏感）
-        luma > 170 → 亮底 → 深色文字
-        luma ≤ 170 → 暗底 → 白色文字
-        """
-        r, g, b = cls._parse_hex(hex_color)
-        luma = (0.299 * r + 0.587 * g + 0.114 * b)
-        return "#4a3a52" if luma > 170 else "#ffffff"
-
-    def _btn_style(self, bg: str, *, padding: str = "4px 14px") -> str:
-        """生成手动按钮的完整 QSS 样式（含 hover/pressed/disabled 状态）。
-
-        根据主题是否有按钮纹理，生成两种不同的 QSS:
-
-        A) 有按钮纹理（macaron 主题）:
-           问题: 全局 QSS 把 watercolor 纹理设为了按钮背景，手动按钮的语义色
-                 （如绿色=胜）会被纹理覆盖，只露出边框一圈颜色。
-           解决: 用 CSS 的 background 简写属性（不是 background-color），
-                 一次性清除所有 background 子属性（包括 background-image），
-                 彻底覆盖水彩纹理。
-           border-radius: 12px — 和 macaron 的 QSS 一致
-
-        B) 无按钮纹理（dark/light 主题）:
-           直接用 background-color 设纯色即可。
-           border-radius: 6px — 和 dark/light 的 QSS 一致
-        """
-        button_texture = self._tm.pixmap_paths.get("QPushButton") if self._tm.pixmap_paths else None
-
-        if button_texture:
-            # ---- 情况 A: macaron，用 background 简写覆盖水彩纹理 ----
-            text_color = self._readable_on(bg)
-            hover_bg = self._lighter(bg, 0.12)
-            pressed_bg = self._darker(bg, 0.08)
-            border_disabled = self._tm.colors.get("border_disabled", "#f5eef4")
-            text_disabled = self._tm.colors.get("text_disabled", "#d5ccd8")
-            return (
-                "QPushButton { "
-                f"background: {bg}; "          # 简写，清除纹理
-                f"color: {text_color}; font-weight: bold; "
-                f"padding: {padding}; border-radius: 12px; "
-                f"border: 1px solid {bg}; "
-                "} "
-                "QPushButton:hover { "
-                f"background: {hover_bg}; "
-                f"border-color: {hover_bg}; "
-                "} "
-                "QPushButton:pressed { "
-                f"background: {pressed_bg}; "
-                f"border-color: {pressed_bg}; "
-                "} "
-                "QPushButton:disabled { "
-                f"background: {self._tm.colors.get('button_disabled_bg', 'rgba(245,238,244,220)')}; "
-                f"color: {text_disabled}; "
-                f"border-color: {border_disabled}; "
-                "}"
-            )
-
-        # ---- 情况 B: dark/light，用 background-color ----
-        border = self._tm.colors.get("border", "#dcdde1")
-        hover_bg = self._lighter(bg)
-        disabled_bg = self._tm.colors.get("button_disabled_bg", "#9E9E9E")
-        disabled_color = self._tm.colors.get("text_disabled", "#e0e0e0")
-        disabled_border = self._tm.colors.get("border_disabled", "#888")
-        return (
-            f"QPushButton {{ background-color: {bg}; color: white; "
-            f"font-weight: bold; padding: {padding}; border-radius: 6px; "
-            f"border: 1px solid {border}; }}"
-            f"QPushButton:hover {{ background-color: {hover_bg}; "
-            f"border-color: {hover_bg}; }}"
-            f"QPushButton:disabled {{ background-color: {disabled_bg}; "
-            f"color: {disabled_color}; border-color: {disabled_border}; }}"
-        )
-
-    # =========================================================================
     # 主题应用代理方法
     # =========================================================================
 
@@ -831,7 +718,7 @@ class MainWindow(QMainWindow):
         # QSplitter 分割比例：首次运行用默认值，后续从 .app_state.json 恢复
         self._splitter.setStretchFactor(0, 2)
         self._splitter.setStretchFactor(1, 3)
-        self._splitter.setSizes(self._read_app_state()["splitter"])
+        self._splitter.setSizes(read_app_state()["splitter"])
 
         # ---- 17. 状态栏（从 .ui 文件加载的控件） ----
         self._status_frame = _require_widget(content.findChild(QFrame, "customStatusBar"), "customStatusBar")
@@ -848,7 +735,7 @@ class MainWindow(QMainWindow):
         # ---- 19. 初始化手动按钮样式 ----
         self._update_manual_buttons()            # 阶段0: 橙色"赢硬币/输硬币"
         self._btn_start.setStyleSheet(            # 启动按钮单独样式（绿色，稍大）
-            self._btn_style(self._theme_colors()["start_bg"], padding="6px 20px")
+            self._tm.make_button_style(self._theme_colors()["start_bg"], padding="6px 20px")
         )
 
         # ---- 20. 构建主题控件引用容器（传给 ThemeManager） ----
@@ -979,7 +866,7 @@ class MainWindow(QMainWindow):
         # 将启动按钮改为"终止等待"按钮
         self._btn_start.setText("终止等待")
         self._btn_start.setStyleSheet(
-            self._btn_style(self._theme_colors()["warning_bg"], padding="6px 20px")
+            self._tm.make_button_style(self._theme_colors()["warning_bg"], padding="6px 20px")
         )
         self._btn_start.setEnabled(True)
         self._btn_stop.setEnabled(False)
@@ -1007,7 +894,7 @@ class MainWindow(QMainWindow):
             self._wait_timer = None
         self._btn_start.setText("启动")
         colors = self._theme_colors()
-        self._btn_start.setStyleSheet(self._btn_style(colors["start_bg"], padding="6px 20px"))
+        self._btn_start.setStyleSheet(self._tm.make_button_style(colors["start_bg"], padding="6px 20px"))
         self._enable_bottom_buttons()
 
     def _start_worker(self) -> None:
@@ -1280,9 +1167,9 @@ class MainWindow(QMainWindow):
             self._btn_undo.setVisible(True)
 
         self._btn_manual_win.setText(left_text)
-        self._btn_manual_win.setStyleSheet(self._btn_style(left_color))
+        self._btn_manual_win.setStyleSheet(self._tm.make_button_style(left_color))
         self._btn_manual_lose.setText(right_text)
-        self._btn_manual_lose.setStyleSheet(self._btn_style(right_color))
+        self._btn_manual_lose.setStyleSheet(self._tm.make_button_style(right_color))
 
     # =========================================================================
     # 表格刷新
@@ -1455,59 +1342,15 @@ class MainWindow(QMainWindow):
         self._float_window.show()
         self._btn_float.setText("关闭悬浮")
 
-    # .app_state.json 各字段默认值（集中管理兜底，新增字段在此添加）
-    # stats / record 为全部列宽（像素），record 不含隐藏列 0
-    # splitter 为 [上, 下] 分割条绝对尺寸，main_pos / float_pos 为 [x, y]
-    _APP_STATE_DEFAULTS: dict[str, object] = {
-        "stats":     [80, 60, 45, 45, 70, 75, 75, 75, 85, 85, 80, 75, 70, 70, 75],
-        "record":    [115, 90, 75, 80, 65, 70, 50, 65],
-        "splitter":  [200, 300],
-        "main_pos":  [100, 100],
-        "float_pos": [100, 100],
-    }
-
-    @staticmethod
-    def _read_app_state() -> dict:
-        """读取 .app_state.json，文件不存在/缺字段时用默认值补齐。
-
-        用户手动删除文件或升级到新版本时，缺失的字段自动回填默认值，
-        下次关闭窗口时写回完整文件。
-        """
-        try:
-            with open(_APP_STATE_PATH, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            data = {}
-        # 用默认值补齐缺失字段（不覆盖已有值）
-        for key, default in MainWindow._APP_STATE_DEFAULTS.items():
-            if key not in data:
-                data[key] = default
-        return data
-
-    @staticmethod
-    def _write_app_state(data: dict) -> None:
-        """写入 .app_state.json。"""
-        with open(_APP_STATE_PATH, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-
-    @staticmethod
-    def _parse_pos(raw: object, min_val: int = -100) -> list[int] | None:
-        """验证并返回有效的 [x, y] 坐标列表，无效则返回 None。"""
-        if isinstance(raw, list) and len(raw) == 2:
-            if all(isinstance(v, (int, float)) for v in raw):
-                x, y = int(raw[0]), int(raw[1])
-                if x >= min_val and y >= min_val:
-                    return [x, y]
-        return None
 
     def _save_float_window_pos(self) -> None:
         """将悬浮窗当前位置保存到 .app_state.json。"""
         if self._float_window is None:
             return
-        saved = self._read_app_state()
+        saved = read_app_state()
         pos = self._float_window.pos()
         saved["float_pos"] = [pos.x(), pos.y()]
-        self._write_app_state(saved)
+        write_app_state(saved)
 
     def _restore_float_window_pos(self) -> None:
         """从 .app_state.json 恢复悬浮窗位置。
@@ -1516,7 +1359,7 @@ class MainWindow(QMainWindow):
             1. 读取保存的位置 → 如果坐标合理（≥ -1000）则恢复
             2. 否则居中放置在主屏幕上
         """
-        pos = self._parse_pos(self._read_app_state().get("float_pos"), min_val=-1000)
+        pos = parse_pos(read_app_state().get("float_pos"), min_val=-1000)
         if pos is not None:
             self._float_window.move(pos[0], pos[1])
             return
@@ -1840,9 +1683,9 @@ class MainWindow(QMainWindow):
             4. 最后一列由 stretchLastSection 管理，不在此处理
             5. record 表跳过列 0（序号，始终隐藏），从列 1 开始恢复
         """
-        saved = self._read_app_state()
+        saved = read_app_state()
 
-        defaults_map = self._APP_STATE_DEFAULTS
+        defaults_map = APP_STATE_DEFAULTS
         for table, key in [(self._stats_table, "stats"), (self._record_table, "record")]:
             defaults = defaults_map[key]
             widths = saved.get(key, [])
@@ -1863,13 +1706,13 @@ class MainWindow(QMainWindow):
         跳过最后一列（由 stretchLastSection 自动管理宽度）。
         record 表额外跳过列 0（序号，始终隐藏，不持久化）。
         """
-        data = self._read_app_state()
+        data = read_app_state()
         for table, key in [(self._stats_table, "stats"), (self._record_table, "record")]:
             if key == "record":
                 data[key] = [table.columnWidth(c) for c in range(1, table.columnCount() - 1)]
             else:
                 data[key] = [table.columnWidth(c) for c in range(table.columnCount() - 1)]
-        self._write_app_state(data)
+        write_app_state(data)
 
     # =========================================================================
     # 窗口关闭事件
@@ -1906,7 +1749,7 @@ class MainWindow(QMainWindow):
 
     def _real_close(self) -> None:
         """绕过托盘模式强制退出：保存状态 → 停止线程 → 退出。"""
-        data = self._read_app_state()
+        data = read_app_state()
         p = self.pos()
         data["main_pos"] = [p.x(), p.y()]
         if self._float_window is not None:
@@ -1917,7 +1760,7 @@ class MainWindow(QMainWindow):
         data["record"] = [self._record_table.columnWidth(c)
                           for c in range(1, self._record_table.columnCount() - 1)]
         data["splitter"] = self._splitter.sizes()
-        self._write_app_state(data)
+        write_app_state(data)
         if self._info_timer is not None:
             self._info_timer.stop()
         if self._wait_timer is not None:
@@ -1933,16 +1776,16 @@ class MainWindow(QMainWindow):
 
         坐标验证: x ≥ -100, y ≥ -100（越界或负太多说明是异常值，不恢复）。
         """
-        pos = self._parse_pos(self._read_app_state().get("main_pos"))
+        pos = parse_pos(read_app_state().get("main_pos"))
         if pos is not None:
             self.move(pos[0], pos[1])
 
     def _save_main_window_pos(self) -> None:
         """保存主窗口位置到 .app_state.json。"""
-        data = self._read_app_state()
+        data = read_app_state()
         p = self.pos()
         data["main_pos"] = [p.x(), p.y()]
-        self._write_app_state(data)
+        write_app_state(data)
 
     # =========================================================================
     # 截图热键（Windows RegisterHotKey + 独立线程消息循环）
@@ -1961,34 +1804,6 @@ class MainWindow(QMainWindow):
     # 热键独立于检测启停，由 hotkey_enabled 开关控制（_sync_hotkeys）。
     # 如果注册失败（如被其他程序占用），状态栏提示用户。
     # =========================================================================
-
-    def _parse_hotkey(self, combo: str) -> tuple[int, int]:
-        """解析热键字符串为 Windows API 所需的 (修饰键位掩码, 虚拟键码)。
-
-        例如 "Ctrl+Shift+S" → (MOD_CONTROL | MOD_SHIFT = 0x0006, ord('S') = 0x53)
-
-        RegisterHotKey 需要两个参数：
-            fsModifiers — 修饰键的位掩码（MOD_ALT=0x0001, MOD_CONTROL=0x0002,
-                          MOD_SHIFT=0x0004, MOD_WIN=0x0008）
-            vk          — 主键的虚拟键码（A-Z → ord('A')-ord('Z'),
-                          F1-F12 → 0x70-0x7B）
-        """
-        MOD = {"Ctrl": 0x0002, "Shift": 0x0004, "Alt": 0x0001, "Win": 0x0008}
-        keys = combo.split("+")
-        mod = 0
-        vk = 0
-        for k in keys:
-            k = k.strip()
-            if k in MOD:
-                mod |= MOD[k]                    # 累加修饰键位掩码
-            elif len(k) == 1:
-                vk = ord(k.upper())              # 单个字母/数字的虚拟键码
-            else:
-                for i in range(1, 13):           # F1-F12
-                    if k == f"F{i}":
-                        vk = 0x70 + i - 1
-                        break
-        return mod, vk
 
     def _snapshot_single(self) -> None:
         """热键 1 回调：截取 Master Duel 窗口并保存到 screenshots/ 目录。
@@ -2063,7 +1878,7 @@ class MainWindow(QMainWindow):
             combo = cfg.get(name, "")
             if not combo:
                 continue
-            mod, vk = self._parse_hotkey(combo)
+            mod, vk = parse_hotkey(combo)
             if vk:
                 hotkeys.append((hid, mod, vk, combo))
         if hotkeys:
