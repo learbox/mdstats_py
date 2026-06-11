@@ -111,6 +111,9 @@ def set_resolution(width: int, height: int) -> None:
 
 _REQUIRED_TEMPLATES = ["coin_win", "coin_lose", "go_first", "go_second", "victory", "defeat", "rank_up", "rank_down"]
 
+# 最近一次检测的最高匹配分数（供状态栏显示，0.0 = 无检测）
+_last_match_score: float = 0.0
+
 # 可选模板：缺失时不阻止检测启动，detect_rank() 会自动返回 None
 _OPTIONAL_TEMPLATES = {"rank_up", "rank_down"}
 
@@ -214,17 +217,17 @@ def match_template(
     """
     # 0. 防御：截图可能因窗口消失等原因返回 None
     if screenshot is None:
-        return False, 0.0
+        return 0.0
 
     # 1. 加载模板
     template = _get_cached_template(template_name)
     if template is None:
-        return False, 0.0
+        return 0.0
 
     # 2. 尺寸检查：截图必须不小于模板
     #    OpenCV matchTemplate 要求: W_screenshot >= W_template 且 H_screenshot >= H_template
     if screenshot.shape[0] < template.shape[0] or screenshot.shape[1] < template.shape[1]:
-        return False, 0.0
+        return 0.0
 
     # 3. 执行模板匹配
     #    TM_CCOEFF_NORMED: 归一化相关系数匹配法
@@ -236,8 +239,8 @@ def match_template(
     #    我们只关心 maxVal（最高匹配度），位置信息不需要
     _, max_val, _, _ = cv2.minMaxLoc(result)
 
-    # 5. 与阈值比较
-    return max_val >= threshold, float(max_val)
+    # 5. 返回原始分数（由调用方比较所有模板后决定结果）
+    return float(max_val)
 
 
 def detect_coin_win(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
@@ -261,10 +264,15 @@ def detect_coin_win(screenshot: np.ndarray, threshold: float = 0.8) -> str | Non
         - 如果两个都匹配成功，说明模板定义有问题（特征重叠），需检查模板。
         - 如果两个都没匹配到，说明当前画面不是硬币结果画面。
     """
+    best_key, best_score = "", 0.0
     for key in ("coin_win", "coin_lose"):
-        matched, _conf = match_template(screenshot, key, threshold)
-        if matched:
-            return "win" if key == "coin_win" else "lose"
+        score = match_template(screenshot, key, threshold)
+        if score > best_score:
+            best_score, best_key = score, key
+    global _last_match_score
+    _last_match_score = best_score
+    if best_score >= threshold:
+        return "win" if best_key == "coin_win" else "lose"
     return None
 
 
@@ -290,10 +298,15 @@ def detect_turn(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
         - go_first 优先匹配，两个都命中时返回 'first'。
         - Master Duel 中先后攻的 UI 通常会持续显示几秒，足够检测到。
     """
+    best_key, best_score = "", 0.0
     for key in ("go_first", "go_second"):
-        matched, _conf = match_template(screenshot, key, threshold)
-        if matched:
-            return "first" if key == "go_first" else "second"
+        score = match_template(screenshot, key, threshold)
+        if score > best_score:
+            best_score, best_key = score, key
+    global _last_match_score
+    _last_match_score = best_score
+    if best_score >= threshold:
+        return "first" if best_key == "go_first" else "second"
     return None
 
 
@@ -316,10 +329,15 @@ def detect_result(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
         - 程序目前不支持识别平局结果（Master Duel 中极少出现）。
         - victory 优先匹配，两个都命中时返回 'win'。
     """
+    best_key, best_score = "", 0.0
     for key in ("victory", "defeat"):
-        matched, _conf = match_template(screenshot, key, threshold)
-        if matched:
-            return "win" if key == "victory" else "lose"
+        score = match_template(screenshot, key, threshold)
+        if score > best_score:
+            best_score, best_key = score, key
+    global _last_match_score
+    _last_match_score = best_score
+    if best_score >= threshold:
+        return "win" if best_key == "victory" else "lose"
     return None
 
 
@@ -346,8 +364,18 @@ def detect_rank(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
         'down'  — 降段局
         None    — 未识别到（普通局，或模板缺失）
     """
+    best_key, best_score = "", 0.0
     for key in ("rank_up", "rank_down"):
-        matched, _conf = match_template(screenshot, key, threshold)
-        if matched:
-            return "up" if key == "rank_up" else "down"
+        score = match_template(screenshot, key, threshold)
+        if score > best_score:
+            best_score, best_key = score, key
+    global _last_match_score
+    _last_match_score = best_score
+    if best_score >= threshold:
+        return "up" if best_key == "rank_up" else "down"
     return None
+
+
+def get_last_score() -> float:
+    """最近一次 detect_* 调用的最高匹配分数（0.0 = 无结果）。"""
+    return _last_match_score

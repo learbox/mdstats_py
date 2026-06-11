@@ -523,6 +523,7 @@ class StatsWorker(QThread):
                 if coin_win:
                     # 同一张截图检测段位升降（升段/降段/普通局）
                     # 不增加新状态，不影响后续流程，结果随 coin 一起发射
+                    coin_score = _det.get_last_score()       # rank 检测前先存 coin 分数
                     rank_result = _det.detect_rank(screenshot, self._threshold)
                     self.rank_detected.emit(rank_result or "")
 
@@ -543,7 +544,7 @@ class StatsWorker(QThread):
                     elif rank_result == "down":
                         rank_text = "（降段局）"
                     self.status_update.emit(
-                        f"已识别: {coin_text}{rank_text} — 等待识别先后攻…"
+                        f"已识别: {coin_text}{rank_text} ({coin_score:.2f}) — 等待识别先后攻…"
                     )
                     self._state = "WAITING_TURN"              # 状态前进一步
 
@@ -557,7 +558,7 @@ class StatsWorker(QThread):
                     self.turn_detected.emit(turn)
                     turn_text = "先攻" if turn == "first" else "后攻"
                     self.status_update.emit(
-                        f"已识别: {turn_text} — 等待识别对局胜负…"
+                        f"已识别: {turn_text} ({_det.get_last_score():.2f}) — 等待识别对局胜负…"
                     )
                     self._state = "WAITING_RESULT"
 
@@ -571,7 +572,7 @@ class StatsWorker(QThread):
                     self.result_detected.emit(result)          # 通知主线程写入 CSV
                     result_text = "胜" if result == "win" else "负"
                     self.status_update.emit(
-                        f"已识别结果: {result_text} — 等待下一局…"
+                        f"已识别结果: {result_text} ({_det.get_last_score():.2f}) — 等待下一局…"
                     )
                     self._state = "WAITING_COIN"               # 回到起点，等下一局
                     self._new_game = True                      # 标记新一局开始，下次检测硬币时清除旧截图
