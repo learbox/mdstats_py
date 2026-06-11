@@ -295,6 +295,17 @@ class ConfigDialog(QDialog):
                  assets_dir: Path | None = None,
                  widget_bg: str = "#ffffff",
                  main_bg: str = "#f0f0f0") -> None:
+        """创建设置弹窗。
+
+        Args:
+            config:      当前配置字典（从 config.toml 加载）。
+            parent:      父窗口（MainWindow），用于模态关联。
+            bg_path:     主题背景图路径，不存在时用默认背景。
+            close_hover: 关闭按钮悬停色（从主题 titlebar 配置读取）。
+            assets_dir:  主题资源目录路径，用于加载图标。
+            widget_bg:   控件背景色（#RRGGBB），用于半透明面板。
+            main_bg:     弹窗主背景色，无背景图时使用。
+        """
         super().__init__(parent)
         self._config = config
         self._close_hover = close_hover
@@ -1432,6 +1443,11 @@ class ConfigDialog(QDialog):
     def _make_hotkey_handler(self, target: QLineEdit):
         """生成 keyPressEvent 处理器——把按键组合转为 'Ctrl+Shift+S' 文本。"""
         def handler(event):
+            """热键捕获 keyPressEvent 处理器 — 把按键组合转为文本。
+
+            支持 Esc 取消捕获恢复原值，非热键按键（如 Tab）让 Qt 正常处理。
+            捕获到有效组合后更新输入框文本，并检查与另一个热键的冲突。
+            """
             key = event.key()
             # Esc 取消捕获，恢复原值
             if key == Qt.Key.Key_Escape:
