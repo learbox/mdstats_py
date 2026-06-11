@@ -105,19 +105,21 @@ python main.py
 | `appearance.theme` | 界面主题，填写 `themes/` 下的文件夹名 | `"macaron"` |
 | `opponent_decks.presets` | 对方卡组预设列表 | `["炎兽", "闪刀姬", ...]` |
 | `debug.save_screenshots` | 保存检测截图（开启后写入 `screenshots/`） | `false` |
+| `debug.auto_clear_screenshots` | 下一局开始时自动清除上一局的截图 | `true` |
 | `debug.log_mode` | 日志模式（开启后写入 `logs/`） | `false` |
 | `debug.log_scope` | 日志记录范围：`status`/`screenshots`/`errors` | `["status","screenshots","errors"]` |
 | `recorder.daily_files` | 是否按日期分 CSV 文件 | `false` |
 | `stats.columns` | 统计表格显示的列（空 = 全部） | `[]` |
 | `clipboard.vertical_layout` | 剪贴板竖排模式 | `false` |
 | `clipboard.scope` | 复制范围（`"all"` / `"current"`） | `"all"` |
-| `floating_window.width` / `height` | 悬浮窗尺寸 | `250` / `300` |
+| `floating_window.width` / `height` | 悬浮窗尺寸（高度低于内容时自动扩容） | `250` / `330` |
 | `notification.enabled` | 对局结束系统气泡通知 | `false` |
 | `notification.duration` | 通知显示时长（秒） | `5` |
 | `notification.minimize_to_tray` | 最小化到系统托盘 | `false` |
 | `notification.obs_mode` | OBS 捕获模式（悬浮窗显示任务栏图标） | `false` |
 | `floating_window.bg_color` | 悬浮窗背景色 | `#BDEF0A` |
 | `floating_window.opacity` | 悬浮窗不透明度 (0-100) | `50` |
+| `floating_window.show_status` | 悬浮窗底部显示检测状态 | `false` |
 | `floating_window.rows` | 悬浮窗显示数据行 | 8 项默认 |
 
 ### 日志模式快速上手
@@ -197,7 +199,7 @@ mdstats_py/
 
 ## 遇到问题？
 
-查看 [常见问题排查](docs/TROUBLESHOOTING.md)。
+查看 [常见问题排查](docs/TROUBLESHOOTING.md)。识别不准确时，99% 是模板问题——请在对应分辨率下重新截取模板图片。
 
 ## 许可证
 

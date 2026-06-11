@@ -16,7 +16,7 @@ save_screenshots = false
 # 下一局开始时自动清除上一局的截图
 auto_clear_screenshots = true
 # 开启日志模式：将运行信息写入 logs/ 目录
-log_mode = true
+log_mode = false
 # 日志记录范围："status"=状态栏消息, "screenshots"=截图事件, "errors"=错误信息
 log_scope = ["status", "screenshots", "errors"]
 
@@ -66,7 +66,7 @@ duration = 1
 # 最小化时隐藏到系统托盘（而非任务栏）
 minimize_to_tray = false
 # OBS 捕获模式（悬浮窗显示任务栏图标以允许 OBS 捕获）
-obs_mode = true
+obs_mode = false
 
 # 悬浮统计窗
 [floating_window]
@@ -77,7 +77,7 @@ show_status = true
 # 悬浮窗宽度（像素）
 width = 250
 # 悬浮窗高度（像素）
-height = 300
+height = 330
 # 背景色
 bg_color = "#bdef0a"
 # 不透明度 0-100

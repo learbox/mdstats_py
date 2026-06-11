@@ -812,6 +812,7 @@ class ConfigDialog(QDialog):
         self._fw_h = QSpinBox()
         self._fw_h.setRange(100, 1000)
         self._fw_h.setSuffix(" px")
+        self._fw_h.setToolTip("窗口最小高度。若数据行 + 状态行超过此值，自动扩容。")
         sr.addWidget(self._fw_h)
         sr.addStretch()
         lo.addLayout(sr)

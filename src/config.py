@@ -170,8 +170,8 @@ use_theme_bg = false
 show_status = false
 # 悬浮窗宽度（像素）
 width = 250
-# 悬浮窗高度（像素）
-height = 300
+# 悬浮窗高度（像素，实际低于内容高度时自动扩容）
+height = 330
 # 背景色
 bg_color = "#bdef0a"
 # 不透明度 0-100
