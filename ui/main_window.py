@@ -1703,6 +1703,10 @@ class MainWindow(QMainWindow):
             self._float_window.update_style(new_cfg, float_bg_path=float_bg)
             self._refresh_float_window()
 
+        # 对方卡组预设更新
+        new_presets = self._config.get("opponent_decks", {}).get("presets", [])
+        self._record_table.setItemDelegateForColumn(4, EditableComboDelegate(new_presets, self._record_table))
+
         # Worker 正在运行 → 停止后用新配置重启
         worker_was_running = self._worker is not None
         if worker_was_running:

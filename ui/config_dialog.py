@@ -426,14 +426,20 @@ class ConfigDialog(QDialog):
         lo.addLayout(r2)
 
         # ---- 保存检测截图 ----
-        # 独立开关，与日志模式无关。开启后每次检测到硬币/先后攻/胜负时
-        # 自动保存截图到 screenshots/ 目录。下一局开始时自动清除。
+        ss_row = QHBoxLayout()
         self._save_screenshots_cb = QCheckBox("保存检测截图")
         self._save_screenshots_cb.setToolTip(
             "开启后，每次检测到硬币输赢、先后攻、对局胜负时自动保存截图\n"
             "到 screenshots/ 目录。下一局开始时自动清除上一局的截图。"
         )
-        lo.addWidget(self._save_screenshots_cb)
+        ss_row.addWidget(self._save_screenshots_cb)
+        self._btn_view_screenshots = QPushButton("查看截图")
+        self._btn_view_screenshots.setFixedWidth(88)
+        self._btn_view_screenshots.clicked.connect(self._open_screenshots_dir)
+        self._btn_view_screenshots.setToolTip("在文件资源管理器中打开截图文件夹。")
+        ss_row.addWidget(self._btn_view_screenshots)
+        ss_row.addStretch()
+        lo.addLayout(ss_row)
 
         lo.addStretch()
         return w
@@ -454,7 +460,7 @@ class ConfigDialog(QDialog):
         self._log_mode_cb.setToolTip("将程序运行信息写入 logs/ 目录。勾选后选择记录范围。")
         log_row.addWidget(self._log_mode_cb)
         self._btn_open_logs = QPushButton("查看日志")
-        self._btn_open_logs.setFixedWidth(80)
+        self._btn_open_logs.setFixedWidth(88)
         self._btn_open_logs.clicked.connect(self._open_logs_dir)
         self._btn_open_logs.setToolTip("在文件资源管理器中打开日志文件夹。")
         log_row.addWidget(self._btn_open_logs)
@@ -1289,6 +1295,14 @@ class ConfigDialog(QDialog):
         """
         for cb in (self._log_scope_status, self._log_scope_screenshots, self._log_scope_errors):
             cb.setEnabled(enabled)
+
+    @staticmethod
+    def _open_screenshots_dir() -> None:
+        """在文件资源管理器中打开截图文件夹。"""
+        import os, subprocess
+        ss_dir = get_project_root() / "screenshots"
+        ss_dir.mkdir(parents=True, exist_ok=True)
+        subprocess.Popen(["explorer", os.fspath(ss_dir)])
 
     @staticmethod
     def _open_logs_dir() -> None:
