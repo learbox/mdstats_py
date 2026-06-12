@@ -1,5 +1,22 @@
 # 更新日志
 
+## v1.7.0 (2026-06-12)
+
+### 新增
+- 截图热键：单次截图（Ctrl+Shift+S）和周期截图（Ctrl+Shift+D），支持自定义
+- `MatchState` 对局状态机，简化三阶段逻辑
+
+### 重构
+- `main_window.py` 从 2077 行降至 1772 行（-14.6%）
+- 提取 `src/hotkey_listener.py`（全局热键监听）
+- 提取 `src/snapshot_controller.py`（热键+截图管理）
+- 提取 `src/app_state.py`（应用状态持久化）
+- 提取 `src/match_state.py`（对局状态机）
+
+### 修复
+- 全局截图热键 WM_HOTKEY 消息收不到（改用独立线程监听）
+- 与 ThemeManager 重复的颜色工具方法移除
+
 ## v1.6.12 (2026-06-12)
 
 ### 新增

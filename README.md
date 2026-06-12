@@ -106,6 +106,10 @@ python main.py
 | `opponent_decks.presets` | 对方卡组预设列表 | `["炎兽", "闪刀姬", ...]` |
 | `debug.save_screenshots` | 保存检测截图（开启后写入 `screenshots/`） | `false` |
 | `debug.auto_clear_screenshots` | 下一局开始时自动清除上一局的截图 | `true` |
+| `debug.hotkey_enabled` | 启用截图热键（全局热键） | `false` |
+| `debug.snapshot_hotkey` | 单次截图热键 | `"Ctrl+Shift+S"` |
+| `debug.periodic_hotkey` | 周期截图热键 | `"Ctrl+Shift+D"` |
+| `debug.periodic_interval` | 周期截图间隔（秒） | `0.5` |
 | `debug.log_mode` | 日志模式（开启后写入 `logs/`） | `false` |
 | `debug.log_scope` | 日志记录范围：`status`/`screenshots`/`errors` | `["status","screenshots","errors"]` |
 | `recorder.daily_files` | 是否按日期分 CSV 文件 | `false` |
@@ -168,8 +172,11 @@ mdstats_py/
 │   ├── capture.py           # 窗口定位与截图（mss + pywin32）
 │   ├── config.py            # config.toml 配置加载
 │   ├── detector.py          # OpenCV 模板匹配识别
+│   ├── hotkey_listener.py   # 全局热键监听（独立线程）
 │   ├── logger.py            # 日志模块（线程安全 + 作用域过滤）
+│   ├── match_state.py       # 对局三阶段状态机
 │   ├── recorder.py          # CSV 读写与统计计算
+│   ├── snapshot_controller.py # 截图热键与周期截图
 │   └── stats_worker.py      # 后台识别线程（QThread）
 └── ui/
     ├── main_window.py       # 主窗口逻辑

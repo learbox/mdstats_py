@@ -317,8 +317,10 @@ class MainWindow(QMainWindow):
     # =========================================================================
 
     def _show_status(self, msg: str) -> None:
-        """更新状态栏消息（左下角的文字）。"""
+        """更新状态栏消息（左下角的文字）+ 同步到悬浮窗状态行。"""
         self._status_label.setText(msg)
+        if self._float_window is not None:
+            self._float_window.update_status(msg)
 
     def _ask_yes_no(self, title: str, text: str) -> bool:
         """弹出"是/否"确认对话框。
@@ -963,9 +965,6 @@ class MainWindow(QMainWindow):
         """
         _log.write("STATUS", msg)
         self._show_status(msg)
-        # 同步到悬浮窗状态行
-        if self._float_window is not None:
-            self._float_window.update_status(msg)
         if msg.startswith("程序已关闭"):
             self._btn_start.setEnabled(True)
             self._btn_stop.setEnabled(False)
