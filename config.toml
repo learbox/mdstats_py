@@ -16,7 +16,7 @@ save_screenshots = false
 # 下一局开始时自动清除上一局的截图
 auto_clear_screenshots = true
 # 启用截图热键（全局热键，游戏全屏时也可用）
-hotkey_enabled = true
+hotkey_enabled = false
 # 单次截图热键
 snapshot_hotkey = "Ctrl+Shift+S"
 # 周期截图热键（按一下开始，再按停止）
