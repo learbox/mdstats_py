@@ -77,6 +77,7 @@ import ctypes
 import json
 import os
 import subprocess
+from datetime import datetime
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -678,6 +679,7 @@ class MainWindow(QMainWindow):
         # QToolButton MenuButtonPopup 模式：左侧点击加载数据，右侧箭头弹出菜单
         reload_menu = QMenu(self._btn_reload)
         reload_menu.addAction("备份数据", self._on_backup_data)
+        reload_menu.addAction("新建数据", self._on_new_data)
         self._btn_reload.setMenu(reload_menu)
         self._btn_copy.clicked.connect(self._copy_to_clipboard)
         self._btn_delete_last.clicked.connect(self._on_delete_last)
@@ -833,13 +835,13 @@ class MainWindow(QMainWindow):
     def _on_backup_data(self) -> None:
         """备份当前活跃 CSV 文件到新文件。
 
-        弹出保存对话框，默认文件名为原文件名加 new 后缀（如 datanew.csv），
+        弹出保存对话框，默认文件名为 bak_ 前缀加原文件名（如 bak_data.csv），
         默认目录为当前 CSV 所在目录。保存后询问用户是否切换到备份文件。
         """
         current_path = get_active_csv_path()
-        # 默认文件名：原文件名加 new，如 data.csv → datanew.csv
+        # 默认文件名：bak_ 前缀加原文件名，如 data.csv → bak_data.csv
         stem = current_path.stem
-        default_name = f"{stem}new.csv"
+        default_name = f"bak_{stem}.csv"
 
         csv_dir = str(current_path.parent.resolve())
         path, _ = QFileDialog.getSaveFileName(
@@ -859,6 +861,45 @@ class MainWindow(QMainWindow):
         # 询问是否切换到备份文件
         if self._ask_yes_no("切换数据文件",
                             f"备份已保存为 {saved_name}。\n\n是否切换到该文件？"):
+            set_active_csv(saved_name)
+            self._reload_tables()
+            self._show_status(f"已切换到: {saved_name}")
+
+    def _on_new_data(self) -> None:
+        """新建空白 CSV 数据文件并询问是否切换。
+
+        弹出保存对话框，默认文件名为 new_data.csv 或 new_data-YYYY-MM-DD.csv
+        （取决于 daily_files 配置），默认目录为当前 CSV 所在目录。
+        保存后询问用户是否切换到新文件。
+        """
+        cfg = load_config()
+        daily = cfg.get("recorder", {}).get("daily_files", False)
+        if daily:
+            today = datetime.now().strftime("%Y-%m-%d")
+            default_name = f"new_data-{today}.csv"
+        else:
+            default_name = "new_data.csv"
+
+        csv_dir = str(get_active_csv_path().parent.resolve())
+        path, _ = QFileDialog.getSaveFileName(
+            self, "新建数据", str(Path(csv_dir) / default_name),
+            "CSV 文件 (*.csv);;所有文件 (*)",
+        )
+        if not path:
+            return
+
+        # 在用户选定的路径写入表头，创建空 CSV
+        import csv as csv_mod
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            csv_mod.writer(f).writerow(RECORD_COLUMNS)
+
+        saved_name = Path(path).name
+        self._show_status(f"已新建: {saved_name}")
+
+        # 询问是否切换到新文件
+        if self._ask_yes_no("切换数据文件",
+                            f"空白文件已创建: {saved_name}。\n\n是否切换到该文件？"):
             set_active_csv(saved_name)
             self._reload_tables()
             self._show_status(f"已切换到: {saved_name}")
