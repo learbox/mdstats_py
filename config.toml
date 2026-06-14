@@ -37,7 +37,7 @@ height = 700
 # 界面外观
 [appearance]
 # 主题文件夹名（内置: "dark" / "light" / "macaron"）
-theme = "macaron"
+theme = "dark"
 
 # 对方卡组预设
 [opponent_decks]

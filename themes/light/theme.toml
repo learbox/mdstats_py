@@ -191,6 +191,8 @@ button_hover_bg     = "#e8f0fe"
 button_pressed_bg   = "#d5e4f7"
 # QPushButton 禁用状态背景色
 button_disabled_bg  = "#ecf0f1"
+# QPushButton 圆角半径（像素）
+button_radius       = "12"
 
 # --- 输入框 ---
 # QLineEdit 默认背景

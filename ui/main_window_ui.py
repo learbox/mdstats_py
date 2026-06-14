@@ -18,7 +18,7 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QFrame, QHBoxLayout,
     QHeaderView, QLabel, QLineEdit, QPushButton,
     QSizePolicy, QSpacerItem, QSplitter, QTableWidget,
-    QTableWidgetItem, QVBoxLayout, QWidget)
+    QTableWidgetItem, QToolButton, QVBoxLayout, QWidget)
 
 class Ui_MainWindow(object):
     def setupUi(self, centralWidget):
@@ -142,8 +142,9 @@ class Ui_MainWindow(object):
 
         self.bottomLayout.addItem(self.spacerDelete)
 
-        self.btn_delete_last = QPushButton(self.bottomPanel)
+        self.btn_delete_last = QToolButton(self.bottomPanel)
         self.btn_delete_last.setObjectName(u"btn_delete_last")
+        self.btn_delete_last.setPopupMode(QToolButton.MenuButtonPopup)
 
         self.bottomLayout.addWidget(self.btn_delete_last)
 

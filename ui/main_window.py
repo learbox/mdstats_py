@@ -97,6 +97,7 @@ from PySide6.QtWidgets import (
     QSplitter,
     QStyledItemDelegate,
     QTableWidget,
+    QToolButton,
     QWidget,
     QTableWidgetItem,
 )
@@ -651,7 +652,7 @@ class MainWindow(QMainWindow):
         self._record_table     = _require_widget(content.findChild(QTableWidget, "record_table"), "record_table")
         self._btn_reload       = _require_widget(content.findChild(QPushButton, "btn_reload"), "btn_reload")
         self._btn_copy         = _require_widget(content.findChild(QPushButton, "btn_copy"), "btn_copy")
-        self._btn_delete_last  = _require_widget(content.findChild(QPushButton, "btn_delete_last"), "btn_delete_last")
+        self._btn_delete_last  = _require_widget(content.findChild(QToolButton, "btn_delete_last"), "btn_delete_last")
         self._btn_about        = _require_widget(content.findChild(QPushButton, "btn_about"), "btn_about")
         self._btn_open_csv     = _require_widget(content.findChild(QPushButton, "btn_open_csv"), "btn_open_csv")
         self._btn_settings = _require_widget(content.findChild(QPushButton, "btn_settings"), "btn_settings")
@@ -675,6 +676,11 @@ class MainWindow(QMainWindow):
         self._btn_reload.clicked.connect(self._on_load_data)
         self._btn_copy.clicked.connect(self._copy_to_clipboard)
         self._btn_delete_last.clicked.connect(self._on_delete_last)
+
+        # QToolButton MenuButtonPopup 模式：左侧点击删除最后记录，右侧箭头弹出菜单
+        del_menu = QMenu(self._btn_delete_last)
+        del_menu.addAction("删除全部记录", self._on_delete_all_records)
+        self._btn_delete_last.setMenu(del_menu)
         self._btn_about.clicked.connect(self._on_about)
         self._btn_open_csv.clicked.connect(self._open_csv_dir)
         self._btn_settings.clicked.connect(self._on_settings)
@@ -1297,6 +1303,25 @@ class MainWindow(QMainWindow):
         save_records(records)
         self._reload_tables()
         self._show_status(f"已删除最后记录: {detail}")
+
+    def _on_delete_all_records(self) -> None:
+        """删除全部对战记录 — 二次确认防止误删。
+
+        确认后加载 CSV → 清空 → 写回空文件 → 刷新表格。
+        记录为空时静默忽略。
+        """
+        records = load_records()
+        if not records:
+            self._show_status("没有记录可删除")
+            return
+
+        if not self._ask_yes_no("确认删除全部",
+                                 f"确定要删除全部 {len(records)} 条记录吗？\n\n此操作不可恢复。"):
+            return
+
+        save_records([])
+        self._reload_tables()
+        self._show_status(f"已删除全部 {len(records)} 条记录")
 
     # =========================================================================
     # 悬浮窗管理

@@ -258,9 +258,12 @@
        </spacer>
       </item>
       <item>
-       <widget class="QPushButton" name="btn_delete_last">
+       <widget class="QToolButton" name="btn_delete_last">
         <property name="text">
          <string>删除最后记录</string>
+        </property>
+        <property name="popupMode">
+         <enum>QToolButton::MenuButtonPopup</enum>
         </property>
        </widget>
       </item>

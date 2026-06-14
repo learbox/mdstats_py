@@ -44,7 +44,7 @@ from typing import Any, Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor, QPalette, QPixmap
-from PySide6.QtWidgets import QApplication, QBoxLayout, QFrame, QHBoxLayout, QPushButton, QTableWidget, QWidget
+from PySide6.QtWidgets import QApplication, QBoxLayout, QFrame, QHBoxLayout, QPushButton, QTableWidget, QToolButton, QWidget
 
 from src.theme_loader import Theme, load_theme
 from ui.titlebar import TitleBar
@@ -82,7 +82,7 @@ class ThemeWidgets:
     record_table: QTableWidget
     btn_start: QPushButton
     btn_stop: QPushButton
-    btn_delete_last: QPushButton
+    btn_delete_last: QToolButton
     title_bar: TitleBar
     status_frame: QFrame
     content: QWidget
@@ -298,20 +298,31 @@ class ThemeManager:
         这两个按钮的颜色不随对局阶段变化，始终使用主题的 lose（红色系）。
         macaron 主题有按钮纹理，需要用 make_button_style 生成特殊样式来
         覆盖水彩纹理；dark/light 主题直接清空局部样式即可（交给全局 QSS）。
+
+        btn_delete_last 是 QToolButton，全局 QSS 的 QPushButton 选择器匹配不到，
+        因此所有主题下都需要用 make_button_style 手动设样式，并追加
+        ::menu-button 子控件样式以消除 Qt 默认的直角分隔外观。
         """
         c = self.colors
+        lose_color = c.get("lose", "#f0a5b5")
         if self.pixmap_paths and self.pixmap_paths.get("QPushButton"):
             # 有按钮纹理（macaron）：用实色覆盖水彩纹理
             w.btn_stop.setStyleSheet(
-                self.make_button_style(c.get("lose", "#f0a5b5"))
+                self.make_button_style(lose_color)
             )
-            w.btn_delete_last.setStyleSheet(
-                self.make_button_style(c.get("lose", "#f0a5b5"))
-            )
+            # macaron hover 提亮 12%
+            hover_bg = self.lighter_color(lose_color, 0.12)
         else:
             # 没有按钮纹理（dark/light）：清空局部样式，让全局 QSS 生效
             w.btn_stop.setStyleSheet("")
-            w.btn_delete_last.setStyleSheet("")
+            # dark/light hover 提亮 25%
+            hover_bg = self.lighter_color(lose_color)
+
+        # QToolButton 在所有主题下都需要显式设样式 + ::menu-button 子控件样式
+        w.btn_delete_last.setStyleSheet(
+            self.make_button_style(lose_color, selector="QToolButton")
+            + self._make_toolbutton_menu_style(lose_color, hover_bg)
+        )
 
     def apply_table_viewport_palette(self, w: ThemeWidgets) -> None:
         """设置表格区域的背景色。
@@ -436,7 +447,8 @@ class ThemeManager:
     # =========================================================================
 
     def make_button_style(self, bg: str, *,
-                          padding: str = "4px 14px") -> str:
+                          padding: str = "4px 14px",
+                          selector: str = "QPushButton") -> str:
         """生成一个带 hover / pressed / disabled 效果的按钮 QSS 字符串。
 
         这个方法被 MainWindow 的 _btn_style 调用，用于动态生成手动按钮的样式。
@@ -458,11 +470,13 @@ class ThemeManager:
            直接用 background-color 设纯色即可。
 
         参数:
-            bg      — 按钮的纯色背景（如 "#27ae60"）
-            padding — QSS padding 值（如 "4px 14px"）
+            bg       — 按钮的纯色背景（如 "#27ae60"）
+            padding  — QSS padding 值（如 "4px 14px"）
+            selector — QSS 类型选择器，默认 "QPushButton"；
+                       QToolButton 等控件需传入对应类型名
 
         返回:
-            完整的 QPushButton 样式字符串（包含 hover/pressed/disabled 伪状态）
+            完整的按钮样式字符串（包含 hover/pressed/disabled 伪状态）
         """
         # 检查是否有按钮纹理
         button_texture = (self.pixmap_paths.get("QPushButton")
@@ -475,43 +489,82 @@ class ThemeManager:
             pressed_bg = self.darker_color(bg, 0.08)           # 按下时加深 8%
             border_disabled = self.colors.get("border_disabled", "#f5eef4")
             text_disabled = self.colors.get("text_disabled", "#d5ccd8")
+            radius = self.colors.get("button_radius", "12")
             # 关键：用 `background:` 而不是 `background-color:` 来覆盖纹理
             return (
-                "QPushButton { "
+                f"{selector} {{ "
                 f"background: {bg}; "                          # 简写，清除纹理
                 f"color: {text_color}; font-weight: bold; "
-                f"padding: {padding}; border-radius: 12px; "
+                f"padding: {padding}; border-radius: {radius}px; "
                 f"border: 1px solid {bg}; "
-                "} "
-                "QPushButton:hover { "
+                f"}} "
+                f"{selector}:hover {{ "
                 f"background: {hover_bg}; "
                 f"border-color: {hover_bg}; "
-                "} "
-                "QPushButton:pressed { "
+                f"}} "
+                f"{selector}:pressed {{ "
                 f"background: {pressed_bg}; "
                 f"border-color: {pressed_bg}; "
-                "} "
-                "QPushButton:disabled { "
+                f"}} "
+                f"{selector}:disabled {{ "
                 f"background: {self.colors.get('button_disabled_bg', 'rgba(245,238,244,220)')}; "
                 f"color: {text_disabled}; "
                 f"border-color: {border_disabled}; "
-                "}"
+                f"}}"
             )
 
         # ---- 情况 B：dark/light 主题，用 background-color ----
         border = self.colors.get("border", "#dcdde1")          # 按钮边框色
+        hover_border = self.colors.get("border_hover", border)  # hover 边框色（独立于背景色）
         hover_bg = self.lighter_color(bg)                      # 提亮 25%
         disabled_bg = self.colors.get("button_disabled_bg", "#9E9E9E")
         disabled_color = self.colors.get("text_disabled", "#e0e0e0")
         disabled_border = self.colors.get("border_disabled", "#888")
+        radius = self.colors.get("button_radius", "12")
         return (
-            f"QPushButton {{ background-color: {bg}; color: white; "
-            f"font-weight: bold; padding: {padding}; border-radius: 6px; "
+            f"{selector} {{ background-color: {bg}; color: white; "
+            f"font-weight: bold; padding: {padding}; border-radius: {radius}px; "
             f"border: 1px solid {border}; }}"
-            f"QPushButton:hover {{ background-color: {hover_bg}; "
-            f"border-color: {hover_bg}; }}"
-            f"QPushButton:disabled {{ background-color: {disabled_bg}; "
+            f"{selector}:hover {{ background-color: {hover_bg}; "
+            f"border-color: {hover_border}; }}"
+            f"{selector}:disabled {{ background-color: {disabled_bg}; "
             f"color: {disabled_color}; border-color: {disabled_border}; }}"
+        )
+
+    def _make_toolbutton_menu_style(self, bg: str, hover_bg: str) -> str:
+        """生成 QToolButton MenuButtonPopup 模式下 ::menu-button 子控件的 QSS。
+
+        Qt 默认的 MenuButtonPopup 会把主按钮右侧裁成直角、给箭头区域画独立边框，
+        视觉上和左侧主按钮割裂。此方法通过 QSS 覆盖默认绘制：
+            - 箭头区域用实色背景 + 右侧圆角，遮住主按钮的右侧直角
+            - 只保留一条细分隔线（border-left）区分两区域
+            - hover 时背景色同步变化
+
+        参数:
+            bg       — 和主按钮相同的背景色
+            hover_bg — hover 时提亮后的背景色
+
+        返回:
+            ::menu-button 子控件的 QSS 字符串
+        """
+        radius = self.colors.get("button_radius", "12")
+        # 分隔线颜色：基于按钮文字色半透明化（浅色主题用黑色半透明，深色主题用白色半透明）
+        text_color = self.colors.get("text_primary", "#ffffff")
+        tc = QColor(text_color)
+        separator = f"rgba({tc.red()},{tc.green()},{tc.blue()},80)"
+        return (
+            "QToolButton::menu-button {"
+            "border: none;"
+            f"border-left: 1px solid {separator};"
+            f"background: {bg};"
+            "width: 16px;"
+            "margin: 1px 0px 1px 0px;"
+            f"border-top-right-radius: {radius}px;"
+            f"border-bottom-right-radius: {radius}px;"
+            "}"
+            "QToolButton::menu-button:hover {"
+            f"background: {hover_bg};"
+            "}"
         )
 
     # =========================================================================
