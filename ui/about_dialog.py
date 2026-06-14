@@ -39,7 +39,7 @@ from src.config import get_project_root
 # 程序元数据 — 修改版本号、作者等请改这里
 # =============================================================================
 
-VERSION = "1.7.2"       # 当前版本号，发版前更新
+VERSION = "1.7.3"       # 当前版本号，发版前更新
 AUTHOR = "learbox"       # 作者名
 LICENSE = "MIT"          # 开源协议
 REPO_URL = "https://github.com/learbox/mdstats_py"  # 项目仓库，留空则不显示链接
@@ -230,6 +230,17 @@ class AboutDialog(QDialog):
             latest = data.get("tag_name", "").lstrip("v")
             if latest and self._compare_versions(latest, VERSION) > 0:
                 self._update_label.setText(f"新版本 v{latest} 已发布！")
+                html_url = data.get("html_url", "")
+                from PySide6.QtCore import QUrl
+                from PySide6.QtGui import QDesktopServices
+                answer = QMessageBox.question(
+                    self, "发现新版本",
+                    f"发现新版本 v{latest}，\n当前版本 v{VERSION}。\n\n是否前往下载页面？",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes,
+                )
+                if answer == QMessageBox.StandardButton.Yes and html_url:
+                    QDesktopServices.openUrl(QUrl(html_url))
             elif latest and self._compare_versions(latest, VERSION) < 0:
                 self._update_label.setText(f"已是最新版本（GitHub: v{latest}）")
             else:
