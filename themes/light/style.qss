@@ -21,6 +21,11 @@ QWidget {
     font-size: {{assets.font_size}}px;    /* 全局默认字号 */
 }
 
+QCheckBox, QDoubleSpinBox, QSpinBox {
+    background-color: {{color.widget_bg}};
+}
+
+
 /* 显式声明字体 —— Qt QSS 在更具体的选择器上有时会忽略 QWidget 的 font-family 继承，
    所以需要给每个常用控件单独声明一次字体 */
 QPushButton, QLineEdit, QLabel, QTableWidget, QHeaderView, QHeaderView::section,
