@@ -1,5 +1,16 @@
 # 更新日志
 
+## v1.7.2 (2026-06-14)
+
+### 新增
+- 加载数据按钮增加备份数据下拉选项（备份 CSV 并可切换）
+- 删除最后记录按钮增加删除全部数据下拉选项（二次确认防误删）
+
+### 修复
+- QCheckBox/QRadioButton 在设置弹窗中有白色背景层（与面板背景不匹配）
+- QCheckBox/QDoubleSpinBox/QSpinBox 背景色匹配主题
+- QToolButton 文字颜色/粗细与 QPushButton 不一致
+
 ## v1.7.1 (2026-06-13)
 
 ### 修复
