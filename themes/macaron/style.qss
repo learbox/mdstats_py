@@ -21,8 +21,11 @@ QWidget {
     font-size: {{assets.font_size}}px;    /* 全局默认字号 */
 }
 
-QCheckBox, QDoubleSpinBox, QSpinBox {
+QDoubleSpinBox, QSpinBox {
     background-color: {{color.widget_bg}};
+}
+QCheckBox[subDisabled="true"], QRadioButton[subDisabled="true"] {
+    color: {{color.text_disabled}};
 }
 
 

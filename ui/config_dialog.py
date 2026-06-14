@@ -316,9 +316,8 @@ class ConfigDialog(QDialog):
             if not pm.isNull():
                 self._bg_pixmap = pm
 
-        # 把 #RRGGBB 转成 rgba(r,g,b,0.7) 保留 30% 透明度
         r, g, b = int(widget_bg[1:3], 16), int(widget_bg[3:5], 16), int(widget_bg[5:7], 16)
-        bg_semi = f"rgba({r},{g},{b},180)"  # alpha≈70%
+        bg_semi = f"rgba({r},{g},{b},180)"  # alpha≈70%，半透明透出背景图
         self._main_bg = main_bg
 
         self._dragging = False
@@ -349,15 +348,6 @@ class ConfigDialog(QDialog):
             "QGroupBox { background: transparent; border: 1px solid palette(mid);"
             "  border-radius: 6px; margin-top: 8px; padding-top: 16px; }"
             "QGroupBox::title { subcontrol-origin: margin; left: 12px; }"
-            # 全局 QSS 给 QCheckBox/QRadioButton 设了固定 widget_bg（如白色），
-            # 在有背景图时 tab pane 是半透明色，固定白会形成"白色补丁"。
-            # 这里设为 transparent 消除补丁，同时给 ::indicator 显式背景让它可见。
-            "QCheckBox { background: transparent; }"
-            "QCheckBox::indicator { background: palette(base);"
-            "  border: 1px solid palette(mid); border-radius: 3px; }"
-            "QRadioButton { background: transparent; }"
-            "QRadioButton::indicator { background: palette(base);"
-            "  border: 1px solid palette(mid); border-radius: 7px; }"
         )
         self._apply_dwm_round_corners()
 
@@ -487,7 +477,8 @@ class ConfigDialog(QDialog):
         auto_row.addWidget(self._auto_clear_cb)
         auto_row.addStretch()
         lo.addLayout(auto_row)
-        self._save_screenshots_cb.toggled.connect(self._auto_clear_cb.setEnabled)
+        self._save_screenshots_cb.toggled.connect(
+            lambda on: self._set_sub_disabled(self._auto_clear_cb, not on))
 
         # ---- 截图热键 ----
         self._hk_enabled = QCheckBox("启用截图热键（全局热键，游戏全屏时也可用）")
@@ -1095,7 +1086,8 @@ class ConfigDialog(QDialog):
         self._save_screenshots_cb.setChecked(dbg.get("save_screenshots", False))
         self._auto_clear_cb.setChecked(dbg.get("auto_clear_screenshots", True))
         # "自动清除"子复选框的启用状态跟随主开关
-        self._auto_clear_cb.setEnabled(dbg.get("save_screenshots", False))
+        self._set_sub_disabled(self._auto_clear_cb,
+                                 not dbg.get("save_screenshots", False))
         hk_on = dbg.get("hotkey_enabled", False)
         self._hk_enabled.setChecked(hk_on)
         self._on_hk_enabled_toggled(hk_on)  # 联动启用/禁用热键输入框
@@ -1498,16 +1490,16 @@ class ConfigDialog(QDialog):
         for w in (self._hk_snapshot, self._hk_periodic, self._hk_interval):
             w.setEnabled(enabled)
 
-    def _on_log_mode_toggled(self, enabled: bool) -> None:
-        """日志模式开关切换时，联动启用/禁用三个子复选框。
+    @staticmethod
+    def _set_sub_disabled(cb: QCheckBox | QRadioButton, disabled: bool) -> None:
+        """属性 + polish 模拟 disabled 文字色，不触发 Windows 接管。"""
+        cb.setProperty("subDisabled", disabled)
+        cb.style().polish(cb)
 
-        为什么要禁用而不是隐藏？
-            隐藏会导致界面布局跳动，用户体验不好。用 setEnabled(False)
-            让复选框变灰但保持在原位，用户能清楚看到"这些选项在日志模式
-            关闭时不生效"。
-        """
+    def _on_log_mode_toggled(self, enabled: bool) -> None:
+        """日志模式开关切换时，属性模拟禁用/启用三个子复选框。"""
         for cb in (self._log_scope_status, self._log_scope_screenshots, self._log_scope_errors):
-            cb.setEnabled(enabled)
+            self._set_sub_disabled(cb, not enabled)
 
     def _capture_hotkey(self, target: QLineEdit) -> None:
         """点击热键输入框 → 进入捕获模式，等待用户按下快捷键。按 Esc 取消。"""
