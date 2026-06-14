@@ -349,6 +349,15 @@ class ConfigDialog(QDialog):
             "QGroupBox { background: transparent; border: 1px solid palette(mid);"
             "  border-radius: 6px; margin-top: 8px; padding-top: 16px; }"
             "QGroupBox::title { subcontrol-origin: margin; left: 12px; }"
+            # 全局 QSS 给 QCheckBox/QRadioButton 设了固定 widget_bg（如白色），
+            # 在有背景图时 tab pane 是半透明色，固定白会形成"白色补丁"。
+            # 这里设为 transparent 消除补丁，同时给 ::indicator 显式背景让它可见。
+            "QCheckBox { background: transparent; }"
+            "QCheckBox::indicator { background: palette(base);"
+            "  border: 1px solid palette(mid); border-radius: 3px; }"
+            "QRadioButton { background: transparent; }"
+            "QRadioButton::indicator { background: palette(base);"
+            "  border: 1px solid palette(mid); border-radius: 7px; }"
         )
         self._apply_dwm_round_corners()
 
