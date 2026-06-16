@@ -1262,7 +1262,21 @@ class MainWindow(QMainWindow):
     def _notify_result(self, coin_cache: str, turn_cache: str,
                        rank_cache: str, result_text: str,
                        new_record: dict | None) -> None:
-        """对局结束时弹出系统气泡通知。"""
+        """对局结束时弹出系统气泡通知。
+
+        自动识别和手动添加共用此方法，消除重复代码。
+
+        气泡内容格式: 赢硬币（升段局）→ 先攻 → 胜
+        如果 CSV 写入失败（new_record is None），追加占用警告，
+        图标从 ℹ 信息切换为 ⚠ 警告。
+
+        Args:
+            coin_cache:  硬币缓存 ('win'/'lose'/'')
+            turn_cache:  先后攻缓存 ('first'/'second'/'')
+            rank_cache:  段位缓存 ('up'/'down'/'')
+            result_text: 结果中文文案 ('胜'/'负')
+            new_record:  add_record 返回值，None 表示写入失败
+        """
         if not self._config.get("notification", {}).get("enabled", False):
             return
         coin_text = "赢硬币" if coin_cache == "win" else "输硬币"
@@ -1561,7 +1575,16 @@ class MainWindow(QMainWindow):
             )
 
     def _apply_float_style(self, cfg: dict) -> None:
-        """应用悬浮窗样式：获取主题背景图 + update_style + enable_status。"""
+        """将配置中的样式应用到已存在的悬浮窗。
+
+        悬浮窗创建和配置重载时共用此方法。
+        从 cfg 中提取 use_theme_bg / float_bg 路径 / show_status，
+        按正确顺序应用：先 update_style（设置样式并 resize），
+        再 enable_status（底部状态行），确保尺寸计算准确。
+
+        Args:
+            cfg: floating_window 段的配置字典（来自 config.toml）
+        """
         float_bg = None
         if cfg.get("use_theme_bg", False) and self._tm.pixmap_paths:
             float_bg = self._tm.pixmap_paths.get("__float_bg__")
