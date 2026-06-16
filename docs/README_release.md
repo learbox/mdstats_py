@@ -76,7 +76,7 @@ MDStats/
 ├── csv/                     # 对战数据
 ├── screenshots/             # 调试截图（开启后自动生成）
 ├── logs/                    # 日志文件（开启后自动生成）
-├── resource/templates/      # 模板图片
+├── resource/                # 资源文件（模板图片等）
 ├── themes/                  # 主题目录（自定义主题文件放这）
 └── .runtime/                # 运行时依赖（请勿修改）
 ```

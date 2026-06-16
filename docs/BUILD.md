@@ -104,7 +104,7 @@ MDStats-vX.Y.Z.zip
     ├── config.toml              # 配置文件
     ├── .app_state.json          # 窗口状态持久化
     ├── csv/                     # 对战数据
-    ├── resource/templates/      # 模板图片
+    ├── resource/                # 资源文件（模板图片等）
     ├── themes/                  # 主题目录（用户可自定义）
     ├── README.md                # 使用说明
     ├── TROUBLESHOOTING.md       # 常见问题排查
