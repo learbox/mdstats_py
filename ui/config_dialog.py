@@ -1496,13 +1496,29 @@ class ConfigDialog(QDialog):
 
     @staticmethod
     def _create_dual_list_hint() -> QLabel:
-        """创建 DualListWidget 的操作提示标签。"""
+        """创建 DualListWidget 的操作提示标签。
+
+        剪贴板列选择（Tab 3）和悬浮窗数据行选择（Tab 5）共用此方法。
+        提示用户拖拽列的顺序、添加/移除/移动等操作方式，
+        灰色小字样式避免与主体内容抢夺视觉焦点。
+
+        Returns:
+            已设置文字和样式的 QLabel。
+        """
         hint = QLabel("> 添加  < 移除  ^ 上移  v 下移  |  清空已选 = 使用默认项")
         hint.setStyleSheet("color: #888; font-size: 11px; background: transparent;")
         return hint
 
     def _create_hotkey_input(self) -> QLineEdit:
-        """创建热键输入框：只读，点击进入捕获模式。"""
+        """创建热键输入框：只读，点击进入按键捕获模式。
+
+        单次截图热键（Ctrl+Shift+S）和周期截图热键（Ctrl+Shift+D）共用此方法。
+        创建只读 QLineEdit，placeholder 提示用户点击后按键，
+        mousePressEvent 转发到 _capture_hotkey 进入捕获状态。
+
+        Returns:
+            已配置 placeholder / readOnly / mousePressEvent 的 QLineEdit。
+        """
         widget = QLineEdit()
         widget.setPlaceholderText("点击后按快捷键")
         widget.setReadOnly(True)
