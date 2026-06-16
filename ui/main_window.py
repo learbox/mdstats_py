@@ -1896,7 +1896,7 @@ class MainWindow(QMainWindow):
 
         defaults_map = APP_STATE_DEFAULTS
         for table, key in [(self._stats_table, "stats"), (self._record_table, "record")]:
-            defaults = cast(list[int], defaults_map[key])
+            defaults: list[int] = defaults_map[key]
             widths = cast(list[int], saved.get(key, []))
             # record 表跳过多余的列 0（旧格式曾保存隐藏列"序号"的宽度 0）
             if key == "record" and widths and widths[0] == 0:
