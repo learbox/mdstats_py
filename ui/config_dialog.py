@@ -491,19 +491,13 @@ class ConfigDialog(QDialog):
         gl_hk = QVBoxLayout(g_hk)
         r1 = QHBoxLayout()
         r1.addWidget(QLabel("单次截图:"))
-        self._hk_snapshot = QLineEdit()
-        self._hk_snapshot.setPlaceholderText("点击后按快捷键")
-        self._hk_snapshot.setReadOnly(True)
-        self._hk_snapshot.mousePressEvent = lambda e: self._capture_hotkey(self._hk_snapshot)
+        self._hk_snapshot = self._create_hotkey_input()
         r1.addWidget(self._hk_snapshot)
         gl_hk.addLayout(r1)
 
         r2 = QHBoxLayout()
         r2.addWidget(QLabel("周期截图:"))
-        self._hk_periodic = QLineEdit()
-        self._hk_periodic.setPlaceholderText("点击后按快捷键")
-        self._hk_periodic.setReadOnly(True)
-        self._hk_periodic.mousePressEvent = lambda e: self._capture_hotkey(self._hk_periodic)
+        self._hk_periodic = self._create_hotkey_input()
         r2.addWidget(self._hk_periodic)
         gl_hk.addLayout(r2)
 
@@ -869,8 +863,7 @@ class ConfigDialog(QDialog):
         # 用 DualListWidget 让用户选择复制哪些字段列，并可调整顺序
         g3 = QGroupBox("要复制的列")
         g3l = QVBoxLayout(g3)
-        hint_cb = QLabel("> 添加  < 移除  ^ 上移  v 下移  |  清空已选 = 使用默认项")
-        hint_cb.setStyleSheet("color: #888; font-size: 11px; background: transparent;")
+        hint_cb = self._create_dual_list_hint()
         g3l.addWidget(hint_cb)
         # 左侧可选 = _ALL_KEYS（全部字段），右侧已选 = _DEFAULT_ROWS（默认 8 项）
         self._cb_dual = DualListWidget(self._ALL_KEYS, list(_DEFAULT_ROWS))
@@ -1500,6 +1493,21 @@ class ConfigDialog(QDialog):
         """日志模式开关切换时，属性模拟禁用/启用三个子复选框。"""
         for cb in (self._log_scope_status, self._log_scope_screenshots, self._log_scope_errors):
             self._set_sub_disabled(cb, not enabled)
+
+    @staticmethod
+    def _create_dual_list_hint() -> QLabel:
+        """创建 DualListWidget 的操作提示标签。"""
+        hint = QLabel("> 添加  < 移除  ^ 上移  v 下移  |  清空已选 = 使用默认项")
+        hint.setStyleSheet("color: #888; font-size: 11px; background: transparent;")
+        return hint
+
+    def _create_hotkey_input(self) -> QLineEdit:
+        """创建热键输入框：只读，点击进入捕获模式。"""
+        widget = QLineEdit()
+        widget.setPlaceholderText("点击后按快捷键")
+        widget.setReadOnly(True)
+        widget.mousePressEvent = lambda e: self._capture_hotkey(widget)
+        return widget
 
     def _capture_hotkey(self, target: QLineEdit) -> None:
         """点击热键输入框 → 进入捕获模式，等待用户按下快捷键。按 Esc 取消。"""
