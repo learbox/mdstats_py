@@ -56,6 +56,7 @@ cp -r resource dist/release/
 cp config.toml dist/release/
 cp .app_state.json dist/release/
 cp docs/README_release.md dist/release/README.md
+cp docs/TROUBLESHOOTING.md dist/release/
 cp LICENSE dist/release/
 ```
 
@@ -105,7 +106,9 @@ MDStats-vX.Y.Z.zip
     ├── csv/                     # 对战数据
     ├── resource/templates/      # 模板图片
     ├── themes/                  # 主题目录（用户可自定义）
-    └── README.md                # 用户说明
+    ├── README.md                # 使用说明
+    ├── TROUBLESHOOTING.md       # 常见问题排查
+    └── LICENSE                  # MIT 开源协议
 ```
 
 ## ⚠ 重要警告
