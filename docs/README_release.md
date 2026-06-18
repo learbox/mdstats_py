@@ -46,15 +46,24 @@
 
 ```
 resource/templates/
+├── rankicons/               # 段位图标源素材（不分分辨率，RGBA 合成用）
+│   ├── img_rankicon_01_l.png  → 新手
+│   ├── img_rankicon_02_l.png  → 青铜
+│   ├── img_rankicon_03_l.png  → 白银
+│   ├── img_rankicon_04_l.png  → 黄金
+│   ├── img_rankicon_05_l.png  → 铂金
+│   ├── img_rankicon_06_l.png  → 钻石
+│   ├── img_rankicon_07_l.png  → 大师
+│   └── img_rateicon_01_l.png  → 巅峰
 ├── 1920x1080/
-│   ├── coin_win.png     ← 赢硬币标识（必选）
-│   ├── coin_lose.png    ← 输硬币标识（必选）
-│   ├── rank_up.png      ← 升段标识（可选，缺失不阻止检测）
-│   ├── rank_down.png    ← 降段标识（可选，缺失不阻止检测）
-│   ├── go_first.png     ← 先攻标识（必选）
-│   ├── go_second.png    ← 后攻标识（必选）
-│   ├── victory.png      ← 胜利界面标识（必选）
-│   └── defeat.png       ← 失败界面标识（必选）
+│   ├── coin_win.png        ← 赢硬币标识（必选）
+│   ├── coin_lose.png       ← 输硬币标识（必选）
+│   ├── rank_up.png         ← 升段标识（可选）
+│   ├── rank_down.png       ← 降段标识（可选）
+│   ├── go_first.png        ← 先攻标识（必选）
+│   ├── go_second.png       ← 后攻标识（必选）
+│   ├── victory.png         ← 胜利界面标识（必选）
+│   └── defeat.png          ← 失败界面标识（必选）
 ├── 2560x1440/
 └── 3840x2160/
 ```
