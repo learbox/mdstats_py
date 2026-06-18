@@ -106,8 +106,8 @@ class RankDetector(QThread):
             except Exception:
                 result = {}
 
-            # 双方都检测到 → 暂存结果，暂停
-            if result.get("player_rank") and result.get("opponent_rank"):
+            # 至少检测到一方 → 暂存结果，暂停
+            if result.get("player_rank") or result.get("opponent_rank"):
                 self._result = result
                 self.rank_icon_detected.emit(result)
                 self._paused = True
