@@ -383,6 +383,9 @@ _RANK_LABELS: dict[str, str] = {}
 # 源素材缓存：{文件名: (BGR, Alpha)}，size = 290×290
 _rank_icon_cache: dict[str, tuple[np.ndarray, np.ndarray]] = {}
 
+# 无数字等级的段位
+_NO_TIER_RANKS = {"巅峰"}
+
 
 def _init_rank_icons() -> None:
     """预加载全部段位图标源素材（RGBA）到内存缓存。"""
@@ -396,10 +399,8 @@ def _init_rank_icons() -> None:
         "img_rankicon_05": "铂金", "img_rankicon_06": "钻石",
         "img_rankicon_07": "大师", "img_rateicon_01": "巅峰",
     }
-    # 无数字等级的段位（巅峰赛不区分 I~V）
-    _NO_TIER_RANKS = {"巅峰"}
 
-    for name in list(_RANK_LABELS):
+    for name in _RANK_LABELS:
         path = _RANK_ICONS_DIR / f"{name}_l.png"
         if path.exists():
             raw = np.fromfile(str(path), dtype=np.uint8)
