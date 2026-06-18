@@ -372,7 +372,6 @@ class ConfigDialog(QDialog):
                 f"QTabBar::tab:selected {{ background: {widget_bg}; }}"
             )
         self._tabs.addTab(self._make_detection_tab(), "识别")
-        self._tabs.addTab(self._make_rank_tab(), "段位")
         self._tabs.addTab(self._make_appearance_tab(), "外观")
         self._tabs.addTab(self._make_clipboard_tab(), "剪贴板")
         self._tabs.addTab(self._make_float_tab(), "悬浮窗")
@@ -513,6 +512,39 @@ class ConfigDialog(QDialog):
         gl_hk.addLayout(r3)
 
         lo.addWidget(g_hk)
+
+        # ---- 段位图标检测 ----
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        lo.addWidget(sep)
+
+        lo.addWidget(QLabel("段位图标检测（独立线程）"))
+        self._rank_enabled_cb = QCheckBox("启用段位图标检测")
+        self._rank_enabled_cb.setToolTip(
+            "独立线程持续截图检测双方段位图标（新手~大师 + I~V），\n"
+            "检测到后写入 CSV 己方段位/对方段位列。"
+        )
+        lo.addWidget(self._rank_enabled_cb)
+
+        rk_row1 = QHBoxLayout()
+        rk_row1.addWidget(QLabel("截图间隔:"))
+        self._rank_interval = QDoubleSpinBox()
+        self._rank_interval.setRange(0.2, 2.0)
+        self._rank_interval.setSingleStep(0.1)
+        self._rank_interval.setSuffix(" 秒")
+        rk_row1.addWidget(self._rank_interval)
+        rk_row1.addStretch()
+        lo.addLayout(rk_row1)
+
+        rk_row2 = QHBoxLayout()
+        rk_row2.addWidget(QLabel("置信度阈值:"))
+        self._rank_threshold = QDoubleSpinBox()
+        self._rank_threshold.setRange(0.5, 0.95)
+        self._rank_threshold.setSingleStep(0.05)
+        rk_row2.addWidget(self._rank_threshold)
+        rk_row2.addStretch()
+        lo.addLayout(rk_row2)
+
         lo.addStretch()
         return w
 
@@ -583,47 +615,6 @@ class ConfigDialog(QDialog):
             "右键托盘图标可还原窗口或退出程序。"
         )
         lo.addWidget(self._tray_minimize_cb)
-
-        lo.addStretch()
-        return w
-
-    # =========================================================================
-    # Tab 2: 段位
-    # =========================================================================
-
-    def _make_rank_tab(self) -> QWidget:
-        """创建"段位"标签页：段位图标检测的独立线程配置。"""
-        w = QWidget()
-        lo = QVBoxLayout(w)
-        lo.setSpacing(12)
-
-        self._rank_enabled_cb = QCheckBox("启用段位图标检测")
-        self._rank_enabled_cb.setToolTip(
-            "独立线程持续截图检测双方段位图标（新手~大师 + I~V），\n"
-            "检测到后写入 CSV 己方段位/对方段位列。"
-        )
-        lo.addWidget(self._rank_enabled_cb)
-
-        row = QHBoxLayout()
-        row.addWidget(QLabel("截图间隔:"))
-        self._rank_interval = QDoubleSpinBox()
-        self._rank_interval.setRange(0.2, 2.0)
-        self._rank_interval.setSingleStep(0.1)
-        self._rank_interval.setSuffix(" 秒")
-        self._rank_interval.setToolTip("间隔越短越容易捕捉到段位图标，但 CPU 占用越高。")
-        row.addWidget(self._rank_interval)
-        row.addStretch()
-        lo.addLayout(row)
-
-        row2 = QHBoxLayout()
-        row2.addWidget(QLabel("置信度阈值:"))
-        self._rank_threshold = QDoubleSpinBox()
-        self._rank_threshold.setRange(0.5, 0.95)
-        self._rank_threshold.setSingleStep(0.05)
-        self._rank_threshold.setToolTip("匹配置信度阈值，越高越严格（减少误识别但可能漏检）。")
-        row2.addWidget(self._rank_threshold)
-        row2.addStretch()
-        lo.addLayout(row2)
 
         lo.addStretch()
         return w
