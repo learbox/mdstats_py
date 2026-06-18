@@ -726,17 +726,17 @@ class MainWindow(QMainWindow):
             table.verticalHeader().setObjectName("verticalHeader")
 
         # ---- 15. 记录表格列委托（下拉菜单） ----
-        # 列5: 赢硬币 (是/否)
-        self._record_table.setItemDelegateForColumn(5, ComboDelegate(["是", "否"], self._record_table))
-        # 列6: 先后攻 (先攻/后攻)
-        self._record_table.setItemDelegateForColumn(6, ComboDelegate(["先攻", "后攻"], self._record_table))
-        # 列7: 结果 (胜/负)
-        self._record_table.setItemDelegateForColumn(7, ComboDelegate(["胜", "负"], self._record_table))
-        # 列8: 段位升降 (升段/降段/空白=普通局)
-        self._record_table.setItemDelegateForColumn(8, ComboDelegate(["升段", "降段", ""], self._record_table))
-        # 列4: 对方卡组 (可编辑下拉 — 预设值来自 config.toml)
+        # 列7: 赢硬币 (是/否)
+        self._record_table.setItemDelegateForColumn(7, ComboDelegate(["是", "否"], self._record_table))
+        # 列8: 先后攻 (先攻/后攻)
+        self._record_table.setItemDelegateForColumn(8, ComboDelegate(["先攻", "后攻"], self._record_table))
+        # 列9: 结果 (胜/负)
+        self._record_table.setItemDelegateForColumn(9, ComboDelegate(["胜", "负"], self._record_table))
+        # 列10: 段位升降 (升段/降段/空白=普通局)
+        self._record_table.setItemDelegateForColumn(10, ComboDelegate(["升段", "降段", ""], self._record_table))
+        # 列6: 对方卡组 (可编辑下拉 — 预设值来自 config.toml)
         opponent_presets: list[str] = self._config.get("opponent_decks", {}).get("presets", [])
-        self._record_table.setItemDelegateForColumn(4, EditableComboDelegate(opponent_presets, self._record_table))
+        self._record_table.setItemDelegateForColumn(6, EditableComboDelegate(opponent_presets, self._record_table))
 
         # ---- 16. 记录表格编辑 → CSV 同步 ----
         self._record_table.cellChanged.connect(self._on_record_cell_changed)
@@ -1833,7 +1833,7 @@ class MainWindow(QMainWindow):
 
         # 对方卡组预设更新
         new_presets = self._config.get("opponent_decks", {}).get("presets", [])
-        self._record_table.setItemDelegateForColumn(4, EditableComboDelegate(new_presets, self._record_table))
+        self._record_table.setItemDelegateForColumn(6, EditableComboDelegate(new_presets, self._record_table))
 
         # Worker 正在运行 → 停止后用新配置重启
         worker_was_running = self._worker is not None
