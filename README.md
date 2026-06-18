@@ -4,7 +4,7 @@
 
 ## 功能
 
-- **自动识别** — 定时截图 + OpenCV 模板匹配，自动检测对局的三阶段信息（硬币/先后攻/胜负），硬币阶段同时检测段位升降
+- **自动识别** — 定时截图 + OpenCV 模板匹配，自动检测对局的三阶段信息（硬币/先后攻/胜负），同时检测段位升降和双方段位图标
 - **手动联动** — 手动按钮与自动识别状态同步，自动漏检时可手动补录，互不冲突
 - **统计表格** — 按卡组汇总对局数、胜率、硬币胜负率、先后攻胜率、段位胜率，支持自定义显示列
 - **记录表格** — 每条对局的详细信息，支持倒序显示和单元格编辑（下拉菜单 + 自由输入）
@@ -116,6 +116,9 @@ python main.py
 | `recorder.daily_files` | 是否按日期分 CSV 文件 | `false` |
 | `stats.columns` | 统计表格显示的列（空 = 全部） | `[]` |
 | `recorder.remember_last_deck` | 启动时自动填入上次使用的卡组 | `true` |
+| `rank_detection.enabled` | 启用段位图标检测 | `true` |
+| `rank_detection.interval` | 段位检测截图间隔（秒） | `0.5` |
+| `rank_detection.confidence_threshold` | 段位匹配置信度阈值 | `0.7` |
 | `clipboard.vertical_layout` | 剪贴板竖排模式 | `true` |
 | `clipboard.scope` | 复制范围（`"all"` / `"current"`） | `"all"` |
 | `floating_window.width` / `height` | 悬浮窗尺寸（高度低于内容时自动扩容） | `250` / `330` |
