@@ -330,8 +330,8 @@ class ConfigDialog(QDialog):
             | Qt.WindowType.Dialog
         )
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setMinimumSize(660, 540)
-        self.resize(680, 560)
+        self.setMinimumSize(660, 600)
+        self.resize(680, 620)
         self.setObjectName("configDialog")
         # 对话框底色：有背景图用 widget_bg（图穿透面板），纯色用 main_bg 偏移版
         dialog_bg = widget_bg
