@@ -394,8 +394,10 @@ def _init_rank_icons() -> None:
         "img_rankicon_01": "新手", "img_rankicon_02": "青铜",
         "img_rankicon_03": "白银", "img_rankicon_04": "黄金",
         "img_rankicon_05": "铂金", "img_rankicon_06": "钻石",
-        "img_rankicon_07": "大师",
+        "img_rankicon_07": "大师", "img_rateicon_01": "巅峰",
     }
+    # 无数字等级的段位（巅峰赛不区分 I~V）
+    _NO_TIER_RANKS = {"巅峰"}
 
     for name in list(_RANK_LABELS) + [
         "img_rankicon_tier1", "img_rankicon_tier2", "img_rankicon_tier3",
@@ -557,19 +559,23 @@ def detect_rank_icon(
         screenshot, 0, 0, mid_x, h // 3, bg_color, threshold,
     )
     if name is not None:
-        result["player_rank"] = _RANK_LABELS.get(name, name)
+        rank_label = _RANK_LABELS.get(name, name)
+        result["player_rank"] = rank_label
         result["player_score"] = score
-        tier, _ = _detect_tier_number(screenshot, rx, ry, rsz)
-        result["player_tier"] = tier
+        if rank_label not in _NO_TIER_RANKS:
+            tier, _ = _detect_tier_number(screenshot, rx, ry, rsz)
+            result["player_tier"] = tier
 
     # 右侧（对手）
     name, score, rx, ry, rsz = _detect_rank_in_roi(
         screenshot, mid_x, 0, w - mid_x, h // 3, bg_color, threshold,
     )
     if name is not None:
-        result["opponent_rank"] = _RANK_LABELS.get(name, name)
+        rank_label = _RANK_LABELS.get(name, name)
+        result["opponent_rank"] = rank_label
         result["opponent_score"] = score
-        tier, _ = _detect_tier_number(screenshot, rx, ry, rsz)
-        result["opponent_tier"] = tier
+        if rank_label not in _NO_TIER_RANKS:
+            tier, _ = _detect_tier_number(screenshot, rx, ry, rsz)
+            result["opponent_tier"] = tier
 
     return result

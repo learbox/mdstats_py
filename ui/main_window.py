@@ -1143,7 +1143,7 @@ class MainWindow(QMainWindow):
                 tier_str = ["", "I", "II", "III", "IV", "V"][tier]
             else:
                 tier_str = ""
-            result.append(f"{rank} {tier_str}".strip())
+            result.append(f"{rank} {tier_str}".strip() if tier_str else rank)
         return result[0], result[1]
 
     def _on_turn_detected(self, turn: str) -> None:
