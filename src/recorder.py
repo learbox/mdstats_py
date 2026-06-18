@@ -66,7 +66,7 @@ _pending_records: list[dict[str, str]] = []
 # ---------------------------------------------------------------------------
 # 这些列名在整个项目中作为字典键使用，修改时需要同步更新所有引用位置。
 # 记录表格列（与 CSV 表头一致）
-COLUMNS = ["序号", "日期", "时间", "使用卡组", "对方卡组", "赢硬币", "先后攻", "结果", "段位升降", "备注"]
+COLUMNS = ["序号", "日期", "时间", "己方段位", "使用卡组", "对方段位", "对方卡组", "赢硬币", "先后攻", "结果", "段位升降", "备注"]
 
 # 统计表格列（与 compute_stats 输出的字典键一致）
 STATS_COLUMNS = [
@@ -265,6 +265,8 @@ def add_record(
     opponent_deck: str = "",
     notes: str = "",
     rank: str = "",
+    player_rank: str = "",
+    opponent_rank: str = "",
 ) -> dict[str, str] | None:
     """添加一条新的对局记录到 CSV 文件。
 
@@ -314,7 +316,9 @@ def add_record(
         "序号": "",  # 统一编号时填充
         "日期": now.strftime("%Y-%m-%d"),
         "时间": now.strftime("%H:%M:%S"),
+        "己方段位": player_rank,
         "使用卡组": deck,
+        "对方段位": opponent_rank,
         "对方卡组": opponent_deck,
         "赢硬币": _map_or_warn("赢硬币", coin_win),
         "先后攻": _map_or_warn("先后攻", turn),

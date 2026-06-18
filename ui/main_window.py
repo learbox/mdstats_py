@@ -1129,21 +1129,22 @@ class MainWindow(QMainWindow):
         """自动识别到段位图标（Platinum II 等）→ 缓存结果。"""
         self._rank_icon_result = rank_info
 
-    def _rank_icon_note(self) -> str:
-        """将缓存的段位图标结果格式化为备注字符串。"""
+    def _rank_icon_strs(self) -> tuple[str, str]:
+        """从缓存的段位图标结果提取己方/对方段位字符串，如 "铂金 II"。"""
         info = self._rank_icon_result
+        self._rank_icon_result = None
         if not info:
-            return ""
-        parts = []
-        for side, key in [("己", "player"), ("敌", "opponent")]:
-            rank = info.get(f"{key}_rank")
-            if not rank:
-                continue
+            return "", ""
+        result = []
+        for key in ["player", "opponent"]:
+            rank = info.get(f"{key}_rank") or ""
             tier = info.get(f"{key}_tier")
-            tier_str = ["", "I", "II", "III", "IV", "V"][tier] if isinstance(tier, int) and 1 <= tier <= 5 else ""
-            parts.append(f"{side}:{rank} {tier_str}".strip())
-        self._rank_icon_result = None  # 用后即清
-        return " | ".join(parts)
+            if isinstance(tier, int) and 1 <= tier <= 5:
+                tier_str = ["", "I", "II", "III", "IV", "V"][tier]
+            else:
+                tier_str = ""
+            result.append(f"{rank} {tier_str}".strip())
+        return result[0], result[1]
 
     def _on_turn_detected(self, turn: str) -> None:
         """自动识别到先后攻 → 缓存并推进到阶段2。
@@ -1177,14 +1178,15 @@ class MainWindow(QMainWindow):
         rank_cache = cached["rank"]
         result_text = "胜" if result == "win" else "负"
 
-        # 段位图标信息拼入备注
-        rank_note = self._rank_icon_note()
+        # 段位图标信息
+        player_rank, opponent_rank = self._rank_icon_strs()
         new_record = add_record(coin_win=self._match.coin_cache,
                                 turn=self._match.turn_cache,
                                 result=result,
                                 deck=self._deck_input.text().strip(),
                                 rank=self._match.rank_cache,
-                                notes=rank_note)
+                                player_rank=player_rank,
+                                opponent_rank=opponent_rank)
 
         self._reset_stage()
         self._reload_tables()
@@ -1262,12 +1264,14 @@ class MainWindow(QMainWindow):
 
         elif self._match.stage == 2:
             # 阶段2: 选择胜/负 → 完成一局，写入 CSV
+            player_rank, opponent_rank = self._rank_icon_strs()
             new_record = add_record(coin_win=self._match.coin_cache,
                                     turn=self._match.turn_cache,
                                     result=side,
                                     deck=self._deck_input.text().strip(),
                                     rank=self._match.rank_cache,
-                                    notes=self._rank_icon_note())
+                                    player_rank=player_rank,
+                                    opponent_rank=opponent_rank)
             # 先提取通知信息，再 reset
             cached = self._match.snapshot()
             coin_cache = cached["coin"]

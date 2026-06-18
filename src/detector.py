@@ -391,10 +391,10 @@ def _init_rank_icons() -> None:
         return
 
     _RANK_LABELS = {
-        "img_rankicon_01": "Rookie", "img_rankicon_02": "Bronze",
-        "img_rankicon_03": "Silver", "img_rankicon_04": "Gold",
-        "img_rankicon_05": "Platinum", "img_rankicon_06": "Diamond",
-        "img_rankicon_07": "Master",
+        "img_rankicon_01": "新手", "img_rankicon_02": "青铜",
+        "img_rankicon_03": "白银", "img_rankicon_04": "黄金",
+        "img_rankicon_05": "铂金", "img_rankicon_06": "钻石",
+        "img_rankicon_07": "大师",
     }
 
     for name in list(_RANK_LABELS) + [
