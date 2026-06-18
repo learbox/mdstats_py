@@ -375,7 +375,7 @@ def get_last_score() -> float:
 # 段位图标检测（源素材 + 背景色合成 + NCC 匹配）
 # =============================================================================
 
-_RANK_ICONS_DIR = get_project_root() / "resource" / "templates" / "rankicons" / "large"
+_RANK_ICONS_DIR = get_project_root() / "resource" / "templates" / "rankicons"
 
 # 段位图标名 → 显示标签映射
 _RANK_LABELS: dict[str, str] = {}
