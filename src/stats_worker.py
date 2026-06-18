@@ -201,8 +201,8 @@ class StatsWorker(QThread):
         self._new_game = True
 
         # ---- 段位图标检测 ----
-        # WAITING_TURN 阶段保存截图，WAITING_RESULT 阶段后台检测
-        self._turn_screenshot = None
+        # WAITING_COIN 阶段保存截图，WAITING_RESULT 阶段后台检测
+        self._coin_screenshot = None
 
         # ---- 当前游戏窗口分辨率 ----
         # 每次 _ensure_templates 成功时更新，用于截图文件名中的分辨率标注。
@@ -539,6 +539,8 @@ class StatsWorker(QThread):
                         self._save_detection_screenshot(screenshot, f"coin_{coin_win}")
                         if rank_result:                      # 如果是升段/降段局也保存一张
                             self._save_detection_screenshot(screenshot, f"rank_{rank_result}")
+                    # 保存截图供段位检测（Phase 3 后台计算）
+                    self._coin_screenshot = screenshot.copy()
                     self.coin_win_detected.emit(coin_win)    # 通知主线程
                     coin_text = "赢硬币" if coin_win == "win" else "输硬币"
                     # 状态栏消息中附加段位升降信息（如有）
@@ -556,8 +558,6 @@ class StatsWorker(QThread):
                 # 检测先后攻（模板：go_first.png / go_second.png）
                 turn = _det.detect_turn(screenshot, self._threshold)
                 if turn:
-                    # 保存截图供段位检测（Phase 3 后台计算）
-                    self._turn_screenshot = screenshot.copy()
                     # 调试截图
                     if self._save_screenshots:
                         self._save_detection_screenshot(screenshot, f"turn_{turn}")
@@ -576,17 +576,17 @@ class StatsWorker(QThread):
                     if self._save_screenshots:
                         self._save_detection_screenshot(screenshot, f"result_{result}")
 
-                    # 段位图标检测（用 WAITING_TURN 保存的截图，耗时 1-2 秒）
+                    # 段位图标检测（用 WAITING_COIN 保存的截图，耗时 1-2 秒）
                     rank_info: dict = {}
-                    if self._turn_screenshot is not None:
+                    if self._coin_screenshot is not None:
                         try:
                             rank_info = _det.detect_rank_icon(
-                                self._turn_screenshot, self._threshold,
+                                self._coin_screenshot, self._threshold,
                             )
                             self.rank_icon_detected.emit(rank_info)
                         except Exception:
                             pass  # 段位检测失败不影响主流程
-                        self._turn_screenshot = None
+                        self._coin_screenshot = None
 
                     self.result_detected.emit(result)          # 通知主线程写入 CSV
                     result_text = "胜" if result == "win" else "负"
