@@ -40,7 +40,7 @@ from PySide6.QtCore import Qt, QPoint, QTranslator, QLibraryInfo, Signal
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QColorDialog, QComboBox, QDialog,
-    QDoubleSpinBox, QFontComboBox, QGroupBox, QHBoxLayout, QLabel,
+    QDoubleSpinBox, QFontComboBox, QFrame, QGroupBox, QHBoxLayout, QLabel,
     QLineEdit, QListWidget, QMessageBox, QPushButton, QRadioButton, QSlider,
     QSpinBox, QTabWidget, QVBoxLayout, QWidget, QButtonGroup,
 )
