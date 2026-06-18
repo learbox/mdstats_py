@@ -65,7 +65,7 @@ pip install mss numpy opencv-python pyside6 pywin32
 
 ```
 resource/templates/
-├── rankicons/              # 段位图标源素材（15 枚）
+├── rankicons/              # 段位图标源素材（9 枚）
 │   ├── img_rankicon_01_l.png  → 新手
 │   ├── ...
 │   └── img_rateicon_01_l.png  → 巅峰
