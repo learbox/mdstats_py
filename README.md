@@ -166,6 +166,7 @@ mdstats_py/
 │   ├── TROUBLESHOOTING.md   # 常见问题排查
 │   └── RELEASE.md           # 发布流程
 ├── resource/templates/      # 模板图片（按分辨率分目录）
+│   ├── rankicons/            # 段位图标（源素材，15 枚 PNG）
 ├── csv/                     # 对战数据 CSV 文件
 ├── screenshots/             # 调试截图输出（开启 save_screenshots 后自动生成）
 ├── logs/                    # 日志文件输出（开启 log_mode 后自动生成）
@@ -190,6 +191,7 @@ mdstats_py/
 │   ├── logger.py            # 日志模块（线程安全 + 作用域过滤）
 │   ├── match_state.py       # 对局三阶段状态机
 │   ├── recorder.py          # CSV 读写与统计计算
+│   ├── rank_detector.py     # 段位图标检测（独立线程）
 │   ├── snapshot_controller.py # 截图热键与周期截图
 │   └── stats_worker.py      # 后台识别线程（QThread）
 └── ui/
