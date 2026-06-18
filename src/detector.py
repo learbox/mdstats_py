@@ -489,7 +489,7 @@ def _detect_tier_number(
     """
     h, w = screenshot.shape[:2]
     tx = int(rank_x + 0.39 * rank_w)
-    ty = int(rank_y + 0.83 * rank_w)
+    ty = int(rank_y + 0.81 * rank_w)
     tw = int(0.22 * rank_w)
     th = int(0.11 * rank_w)
 
