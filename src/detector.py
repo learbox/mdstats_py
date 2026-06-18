@@ -399,10 +399,7 @@ def _init_rank_icons() -> None:
     # 无数字等级的段位（巅峰赛不区分 I~V）
     _NO_TIER_RANKS = {"巅峰"}
 
-    for name in list(_RANK_LABELS) + [
-        "img_rankicon_tier1", "img_rankicon_tier2", "img_rankicon_tier3",
-        "img_rankicon_tier4", "img_rankicon_tier5",
-    ]:
+    for name in list(_RANK_LABELS):
         path = _RANK_ICONS_DIR / f"{name}_l.png"
         if path.exists():
             raw = np.fromfile(str(path), dtype=np.uint8)
