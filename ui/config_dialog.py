@@ -524,6 +524,7 @@ class ConfigDialog(QDialog):
             "独立线程持续截图检测双方段位图标（新手~大师 + I~V），\n"
             "检测到后写入 CSV 己方段位/对方段位列。"
         )
+        self._rank_enabled_cb.toggled.connect(self._on_rank_enabled_toggled)
         lo.addWidget(self._rank_enabled_cb)
 
         rk_row1 = QHBoxLayout()
@@ -1530,6 +1531,11 @@ class ConfigDialog(QDialog):
         if self._log_scope_errors.isChecked():
             scopes.append("errors")
         return scopes
+
+    def _on_rank_enabled_toggled(self, enabled: bool) -> None:
+        """段位检测启用开关切换时，联动启用/禁用间隔和阈值控件。"""
+        for w in (self._rank_interval, self._rank_threshold):
+            w.setEnabled(enabled)
 
     def _on_hk_enabled_toggled(self, enabled: bool) -> None:
         """热键启用开关切换时，联动启用/禁用热键相关控件。"""
