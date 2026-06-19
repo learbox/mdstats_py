@@ -730,6 +730,22 @@ def _detect_tier_number(
 
     total_w = len(proj)  # 字符区总宽度（列数）
 
+    # 峰谷比（峰值/谷值），衡量信号清晰度，模糊图像峰谷差距小
+    peak_values = sorted([v for v in proj if v > peak_th], reverse=True)
+    valley_values = sorted([v for v in proj if v < peak_th * 0.5])
+    clarity = 1.0  # 默认满分
+    if peak_values and valley_values:
+        avg_peak = sum(peak_values[:3]) / min(3, len(peak_values))
+        avg_valley = sum(valley_values[:3]) / min(3, len(valley_values))
+        if avg_valley > 0:
+            clarity = min(1.0, (avg_peak / avg_valley - 1) / 5.0)
+        clarity = max(0.3, clarity)  # 最低 0.3，不全盘否定
+
+    def _conf(margin: float, max_margin: float = 1.0) -> float:
+        """置信度 = 0.5 + 0.5 × min(离边界的距离 / 最大距离, 1)，再乘以清晰度。
+        margin=0 表示刚好在边界上 → 0.5；margin=1 → 1.0。"""
+        return 0.5 + 0.5 * min(abs(margin) / max_margin, 1.0)
+
     # ---- 分类判定 ----
     # 实测结论（基于游戏实际字体，1600×900 截图）：
     #   I   = 1 个窄峰（一根竖线占字符区 10~20%）
@@ -737,23 +753,49 @@ def _detect_tier_number(
     #   II  = 2 个等宽窄峰（两根分离竖线）
     #   IV  = 2 个峰，一窄(I) + 一宽(V形)，宽窄比 > 1.8
     #   III = 3 个窄峰
+    TIER_CONFIDENCE_THRESHOLD = 0.5  # 低于此值的等级判定视为不可靠，丢弃
+
     if n_peaks == 1:
         widths = _measure_peaks(proj, peak_th)
-        if widths and widths[0] > total_w * 0.25:
-            return 5, 0.6   # V: 单宽峰（平顶山），占字符区 > 25%
-        return 1, 0.8       # I: 单窄峰
+        if not widths:
+            return None, 0.0
+        peak_ratio = widths[0] / total_w  # 峰宽占比
+        if peak_ratio > 0.25:
+            # V: 宽峰，离 0.25 越远越确定
+            conf = round(_conf(peak_ratio - 0.25, 0.25) * clarity, 2)
+            if conf >= TIER_CONFIDENCE_THRESHOLD:
+                return 5, conf
+            return None, conf
+        else:
+            # I: 窄峰
+            conf = round(_conf(0.25 - peak_ratio, 0.12) * clarity, 2)
+            if conf >= TIER_CONFIDENCE_THRESHOLD:
+                return 1, conf
+            return None, conf
 
     if n_peaks == 2:
         widths = _measure_peaks(proj, peak_th)
         if len(widths) >= 2:
             wide_ratio = max(widths) / max(min(widths), 1)
             if wide_ratio > 1.8:
-                return 4, 0.6   # IV: I(窄峰) + V形(宽峰)
-            return 2, 0.8       # II: 两个等宽窄峰
-        return 2, 0.8  # fallback
+                # IV: 宽峰/窄峰比离 1.8 越远越确定
+                conf = round(_conf(wide_ratio - 1.8, 1.0) * clarity, 2)
+                if conf >= TIER_CONFIDENCE_THRESHOLD:
+                    return 4, conf
+                return None, conf
+            else:
+                # II: 等宽峰
+                conf = round(_conf(1.8 - wide_ratio, 1.0) * clarity, 2)
+                if conf >= TIER_CONFIDENCE_THRESHOLD:
+                    return 2, conf
+                return None, conf
+        return None, 0.0
 
     if n_peaks == 3:
-        return 3, 0.8   # III
+        conf = round(0.8 * clarity, 2)
+        if conf >= TIER_CONFIDENCE_THRESHOLD:
+            return 3, conf
+        return None, conf
 
     return None, 0.0
 
