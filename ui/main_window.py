@@ -737,7 +737,7 @@ class MainWindow(QMainWindow):
         self._record_table.setItemDelegateForColumn(10, ComboDelegate(["升段", "降段", ""], self._record_table))
         # 列6: 对方卡组 (可编辑下拉 — 预设值来自 config.toml)
         opponent_presets: list[str] = self._config.get("opponent_decks", {}).get("presets", [])
-        self._record_table.setItemDelegateForColumn(6, EditableComboDelegate(opponent_presets, self._record_table))
+        self._record_table.setItemDelegateForColumn(5, EditableComboDelegate(opponent_presets, self._record_table))
 
         # ---- 16. 记录表格编辑 → CSV 同步 ----
         self._record_table.cellChanged.connect(self._on_record_cell_changed)
