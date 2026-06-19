@@ -127,6 +127,7 @@ python main.py
 | `debug.periodic_interval` | 周期截图间隔（秒） | `0.5` |
 | `debug.log_mode` | 日志模式（开启后写入 `logs/`） | `false` |
 | `debug.log_scope` | 日志记录范围：`status`/`screenshots`/`errors` | `["status","screenshots","errors"]` |
+| `debug.show_confidence` | 状态栏显示检测置信度 | `false` |
 | `recorder.daily_files` | 是否按日期分 CSV 文件 | `false` |
 | `stats.columns` | 统计表格显示的列（空 = 全部） | `[]` |
 | `recorder.remember_last_deck` | 启动时自动填入上次使用的卡组 | `true` |
@@ -217,6 +218,7 @@ mdstats_py/
     ├── about_dialog.py      # 关于弹窗 + 版本号等元数据
     ├── titlebar.py          # 自定义标题栏
     ├── theme_manager.py     # 主题管理器
+    ├── _base_dialog.py       # 无边框弹窗基类（共享 paintEvent/DWM/拖拽）
     ├── floating_window.py   # 悬浮统计窗
     └── rank_stats_dialog.py  # 详细统计弹窗
 ```
