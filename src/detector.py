@@ -360,15 +360,17 @@ def detect_rank(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
     _last_match_score = best_score
 
     if best_score >= threshold and best_key:
-        # 首次检测到时自动持久化 rank ROI（模板大小 ×4，留足冗余）
+        # 首次检测到时自动持久化 rank ROI（模板位置 ±50px 冗余）
         if "rank" not in _roi_cache:
             tpl = _get_cached_template(best_key)
             if tpl is not None:
                 th, tw = tpl.shape[:2]
-                _save_roi("rank",
-                          max(0, best_x - tw * 2), max(0, best_y - th * 2),
-                          min(tw * 4, screenshot.shape[1] - max(0, best_x - tw * 2)),
-                          min(th * 4, screenshot.shape[0] - max(0, best_y - th * 2)))
+                MARGIN = 50
+                rx = max(0, best_x - MARGIN)
+                ry = max(0, best_y - MARGIN)
+                rw = min(tw + MARGIN * 2, screenshot.shape[1] - rx)
+                rh = min(th + MARGIN * 2, screenshot.shape[0] - ry)
+                _save_roi("rank", rx, ry, rw, rh)
         return "up" if best_key == "rank_up" else "down"
     return None
 
