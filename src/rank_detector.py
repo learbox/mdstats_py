@@ -110,7 +110,12 @@ class RankDetector(QThread):
 
         主窗口在写入 CSV 后（一局正式结束）调用此方法，
         让检测线程重新开始截图搜索段位图标。
+
+        必须清空 _result：上一局的检测数据还在里面，
+        如果不清理，线程恢复后第一帧就会因为双方都已"检测到"
+        而直接发射旧结果，导致状态栏显示错乱的段位信息。
         """
+        self._result = None  # 清除旧数据，否则会被误发射
         self._paused = False
 
     def stop(self) -> None:
