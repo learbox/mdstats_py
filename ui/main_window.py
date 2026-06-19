@@ -2178,10 +2178,10 @@ class MainWindow(QMainWindow):
         if self._wait_timer is not None:
             self._wait_timer.stop()
         if self._worker is not None:
-            self._worker.stop()
-            self._worker.wait(1000)
+            self._worker.terminate()  # 关闭时不等待，工作线程无文件 I/O
+            self._worker.wait()
         if self._rank_detector is not None:
-            self._rank_detector.terminate()  # 关闭时强制终止，不等模板匹配
+            self._rank_detector.terminate()
             self._rank_detector.wait()
 
         # ---- 4. 注销全局热键并退出事件循环 ----
