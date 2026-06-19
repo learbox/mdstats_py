@@ -36,7 +36,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt, QPoint, QTranslator, QLibraryInfo, Signal
+from PySide6.QtCore import Qt, QTranslator, QLibraryInfo, Signal
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QColorDialog, QComboBox, QDialog,
@@ -45,6 +45,7 @@ from PySide6.QtWidgets import (
     QSpinBox, QTabWidget, QVBoxLayout, QWidget, QButtonGroup,
 )
 
+from ui._base_dialog import _BaseFramelessDialog
 from src.config import get_project_root
 from ui.floating_window import _ROW_KEY_MAP, _DEFAULT_ROWS
 
@@ -281,7 +282,7 @@ class DualListWidget(QWidget):
 # ConfigDialog
 # =============================================================================
 
-class ConfigDialog(QDialog):
+class ConfigDialog(_BaseFramelessDialog):
     """设置弹窗，5 标签页 + 确定/取消。"""
 
     config_saved = Signal()
@@ -295,33 +296,19 @@ class ConfigDialog(QDialog):
                  assets_dir: Path | None = None,
                  widget_bg: str = "#ffffff",
                  main_bg: str = "#f0f0f0") -> None:
-        """创建设置弹窗。
-
-        Args:
-            config:      当前配置字典（从 config.toml 加载）。
-            parent:      父窗口（MainWindow），用于模态关联。
-            bg_path:     主题背景图路径，不存在时用默认背景。
-            close_hover: 关闭按钮悬停色（从主题 titlebar 配置读取）。
-            assets_dir:  主题资源目录路径，用于加载图标。
-            widget_bg:   控件背景色（#RRGGBB），用于半透明面板。
-            main_bg:     弹窗主背景色，无背景图时使用。
-        """
+        """创建设置弹窗。"""
         super().__init__(parent)
         self._config = config
         self._close_hover = close_hover
         self._assets_dir = assets_dir
-        self._bg_pixmap: QPixmap | None = None
-        if bg_path:
-            pm = QPixmap(bg_path)
-            if not pm.isNull():
-                self._bg_pixmap = pm
-
-        r, g, b = int(widget_bg[1:3], 16), int(widget_bg[3:5], 16), int(widget_bg[5:7], 16)
-        bg_semi = f"rgba({r},{g},{b},180)"  # alpha≈70%，半透明透出背景图
         self._main_bg = main_bg
 
-        self._dragging = False
-        self._drag_start = QPoint()
+        # 背景图 + 拖拽（基类提供）
+        self._init_background(bg_path)
+        self._init_drag()
+
+        r, g, b = int(widget_bg[1:3], 16), int(widget_bg[3:5], 16), int(widget_bg[5:7], 16)
+        bg_semi = f"rgba({r},{g},{b},180)"
 
         self.setWindowTitle("设置")
         self.setWindowFlags(
@@ -1687,64 +1674,3 @@ class ConfigDialog(QDialog):
         log_dir.mkdir(parents=True, exist_ok=True)
         subprocess.Popen(["explorer", os.fspath(log_dir)])
 
-    # =========================================================================
-    # 背景绘制
-    # =========================================================================
-
-    def paintEvent(self, event) -> None:
-        """手绘背景：有图则贴图填充，无图走默认 QDialog 背景。"""
-        painter = QPainter(self)
-        if self._bg_pixmap is not None:
-            scaled = self._bg_pixmap.scaled(
-                self.size(),
-                Qt.AspectRatioMode.IgnoreAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            painter.drawPixmap(0, 0, scaled)
-        painter.end()
-        super().paintEvent(event)
-
-    # =========================================================================
-    # 拖拽
-    # =========================================================================
-
-    def mousePressEvent(self, event) -> None:
-        """鼠标按下 — 左键按下时记录起始位置，进入拖拽模式。"""
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._dragging = True
-            self._drag_start = event.globalPosition().toPoint()
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event) -> None:
-        """鼠标移动 — 拖拽模式下移动弹窗位置。"""
-        if self._dragging:
-            delta = event.globalPosition().toPoint() - self._drag_start
-            self.move(self.pos() + delta)
-            self._drag_start = event.globalPosition().toPoint()
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event) -> None:
-        """鼠标释放 — 退出拖拽模式。"""
-        self._dragging = False
-        super().mouseReleaseEvent(event)
-
-    # =========================================================================
-    # DWM 圆角（Windows 11）
-    # =========================================================================
-
-    def _apply_dwm_round_corners(self) -> None:
-        """给无边框弹窗加 Win11 原生圆角。"""
-        import ctypes, os
-        if os.name != "nt":
-            return
-        try:
-            hwnd = int(self.winId())
-            dwmwa = 33  # DWMWA_WINDOW_CORNER_PREFERENCE
-            dwmwcp_round = 2  # 圆角
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(  # type: ignore[attr-defined]
-                hwnd, dwmwa,
-                ctypes.byref(ctypes.c_int(dwmwcp_round)),
-                ctypes.sizeof(ctypes.c_int),
-            )
-        except OSError:
-            pass

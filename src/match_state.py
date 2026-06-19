@@ -75,15 +75,15 @@ class MatchState:
         if self.stage == 0:
             self.coin_cache = side
             self.stage = 1
-            return (1, "")
+            return 1, ""
         elif self.stage == 1:
             turn = "first" if side == "win" else "second"
             self.turn_cache = turn
             self.stage = 2
-            return (2, turn)
+            return 2, turn
         else:
             # 阶段2: 返回结果让 MainWindow 写 CSV
-            return (2, side)
+            return 2, side
 
     def undo(self) -> int:
         """撤销上一阶段选择，逐级回退。返回回退后的阶段号。"""

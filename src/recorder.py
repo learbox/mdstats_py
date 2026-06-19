@@ -569,11 +569,11 @@ def compute_rank_stats(
         按段位排序的统计列表，含"合计"行。
     """
     # 段位顺序
-    RANK_ORDER = ["新手", "青铜", "白银", "黄金", "铂金", "钻石", "大师", "巅峰"]
+    rank_order = ["新手", "青铜", "白银", "黄金", "铂金", "钻石", "大师", "巅峰"]
 
     def _tier_group(rank_str: str) -> str:
         """从'铂金 II'提取'铂金'，未知归'未知'。"""
-        for tier in RANK_ORDER:
+        for tier in rank_order:
             if rank_str.startswith(tier):
                 return tier
         return "未知"
@@ -584,7 +584,7 @@ def compute_rank_stats(
         return f"{win / total * 100:.1f}%"
 
     # 按大段分组计数：{段位: {"total":, "win":, "lose":}}
-    ranks: dict[str, dict] = {r: {"total": 0, "win": 0, "lose": 0} for r in RANK_ORDER}
+    ranks: dict[str, dict] = {r: {"total": 0, "win": 0, "lose": 0} for r in rank_order}
     ranks["未知"] = {"total": 0, "win": 0, "lose": 0}
 
     total_all = win_all = lose_all = 0
@@ -603,7 +603,7 @@ def compute_rank_stats(
             lose_all += 1
 
     stats = []
-    for rank_name in RANK_ORDER + ["未知"]:
+    for rank_name in rank_order + ["未知"]:
         d = ranks[rank_name]
         if d["total"] > 0 or rank_name == "未知":
             stats.append({

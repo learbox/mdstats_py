@@ -587,7 +587,7 @@ class MainWindow(QMainWindow):
         self._wait_timer: QTimer | None = None# 等待游戏启动的轮询定时器
         self._info_timer: QTimer | None = None# 右下角信息标签刷新定时器
         self._match = MatchState()               # 三阶段对局状态机
-        self._rank_detector: RankDetector | None = None  # 段位图标检测线程（启动时按配置创建）
+        self._rank_detector: Any | None = None  # type: ignore[annotation-unchecked] — 段位图标检测线程（延迟导入）
         self._rank_icon_result: dict | None = None        # 段位图标检测结果暂存
         # 段位图标在硬币阶段（阶段1）显示，但数据要到对局结束才写入 CSV。
         # 检测结果先存在 _rank_icon_result，对局结束时取出写入记录。
@@ -1829,8 +1829,7 @@ class MainWindow(QMainWindow):
         """
         from ui.rank_stats_dialog import RankStatsDialog
         # 如果主题提供了 __settings_bg__ 背景图，传给弹窗做半透明效果
-        bg_path = (self._tm.pixmap_paths.get("__settings_bg__")
-                   if self._tm.pixmap_paths else "")
+        bg_path: str = self._tm.pixmap_paths.get("__settings_bg__", "") if self._tm.pixmap_paths else ""
         dialog = RankStatsDialog(
             self, self._config, self._tm.colors,
             bg_path=bg_path,

@@ -561,13 +561,49 @@ def _composite_rank_icon(name: str, size: int, bg_color: np.ndarray) -> np.ndarr
     # 2. Alpha 混合：result = foreground × alpha + background × (1 - alpha)
     #    alpha 转为 0.0~1.0 的浮点数
     alpha_f = scaled_alpha.astype(np.float32) / 255.0
-    fg = scaled_bgr.astype(np.float32)  # type: ignore[union-attr]
-    bg = np.full((size, size, 3), bg_color, dtype=np.float32)  # 纯色背景
-    composite = (fg * alpha_f[:, :, None]
-                 + bg * (1 - alpha_f[:, :, None])).astype(np.uint8)  # type: ignore[union-attr]
+    fg: np.ndarray = np.asarray(scaled_bgr, dtype=np.float32)
+    bg: np.ndarray = np.full((size, size, 3), bg_color, dtype=np.float32)
+    blended = fg * alpha_f[:, :, None] + bg * (1 - alpha_f[:, :, None])  # type: ignore[operator]
+    composite = np.asarray(blended, dtype=np.uint8)
 
     _composite_cache[cache_key] = composite
     return composite
+
+
+def _match_icon_at_sizes(
+    roi: np.ndarray, icon: str, sz_range: range, bg_color: np.ndarray,
+    offset_x: int, offset_y: int, *, strict_roi: bool = False,
+) -> tuple[str, float, int, int, int]:
+    """在 ROI 上对指定图标和尺寸范围逐一模板匹配，返回最高分结果。
+
+    两个场景共用此函数：
+        _detect_rank_in_roi — 粗搜+精搜，步长12/2，strict_roi=False
+        detect_rank_icon  — 缓存位置精搜，步长3，strict_roi=True
+
+    strict_roi=True 时模板必须严格小于ROI（用 >= 判断而非 >），
+    因为缓存搜索结果区域可能很紧凑。
+    """
+    best_name = ""
+    best_score = 0.0
+    best_x = best_y = best_sz = 0
+    for sz in sz_range:
+        tmpl = _composite_rank_icon(icon, sz, bg_color)
+        if tmpl is None:
+            continue
+        if strict_roi:
+            if tmpl.shape[0] >= roi.shape[0] or tmpl.shape[1] >= roi.shape[1]:
+                continue
+        else:
+            if tmpl.shape[0] > roi.shape[0] or tmpl.shape[1] > roi.shape[1]:
+                continue
+        res = cv2.matchTemplate(roi, tmpl, cv2.TM_CCOEFF_NORMED)
+        _, val, _, loc = cv2.minMaxLoc(res)
+        if val > best_score:
+            best_score = val
+            best_name = icon
+            best_x, best_y = offset_x + loc[0], offset_y + loc[1]
+            best_sz = sz
+    return best_name, best_score, best_x, best_y, best_sz
 
 
 def _detect_rank_in_roi(
@@ -605,33 +641,27 @@ def _detect_rank_in_roi(
     min_sz = max(20, img_w // 25)
     max_sz = min(img_w // 5, roi_h, roi_w // 2)
 
-    best_name, best_score = None, 0.0
+    best_name, best_score = "", 0.0
     best_x, best_y, best_sz = 0, 0, 0
-
-    def _match_sizes(icon: str, sz_range: range, off_x: int, off_y: int) -> None:
-        """对指定尺寸范围做模板匹配，更新外层 best_* 变量。"""
-        nonlocal best_name, best_score, best_x, best_y, best_sz
-        for sz in sz_range:
-            tmpl = _composite_rank_icon(icon, sz, bg_color)
-            if tmpl is None or tmpl.shape[0] > roi.shape[0] or tmpl.shape[1] > roi.shape[1]:
-                continue
-            result = cv2.matchTemplate(roi, tmpl, cv2.TM_CCOEFF_NORMED)
-            _, val, _, loc = cv2.minMaxLoc(result)
-            if val > best_score:
-                best_score, best_name = val, icon
-                best_x, best_y = off_x + loc[0], off_y + loc[1]
-                best_sz = sz
 
     for name in _RANK_LABELS:
         # 粗搜：步长 12px，快速扫描
-        _match_sizes(name, range(min_sz, max_sz, 12), roi_x, roi_y)
+        nm, sc, bx, by, bz = _match_icon_at_sizes(
+            roi, name, range(min_sz, max_sz, 12), bg_color, roi_x, roi_y)
+        if sc > best_score:
+            best_name, best_score = nm, sc
+            best_x, best_y, best_sz = bx, by, bz
         # 精搜：如果粗搜有高分候选，在最佳尺寸 ±10px 范围以步长 2px 精调
         if best_name == name and best_score > 0.5:
             fine_start = max(min_sz, best_sz - 10)
             fine_end = min(max_sz, best_sz + 12)
-            _match_sizes(name, range(fine_start, fine_end, 2), roi_x, roi_y)
+            nm, sc, bx, by, bz = _match_icon_at_sizes(
+                roi, name, range(fine_start, fine_end, 2), bg_color, roi_x, roi_y)
+            if sc > best_score:
+                best_name, best_score = nm, sc
+                best_x, best_y, best_sz = bx, by, bz
 
-    if best_score < threshold or best_name is None:
+    if best_score < threshold or best_name in ("", None):
         return None, best_score, 0, 0, 0  # 分数不够 → 视为未检测到
     return best_name, best_score, best_x, best_y, best_sz
 
@@ -859,11 +889,11 @@ def detect_rank_icon(
         skip_sides = set()
 
     # 分别检测玩家（左侧）和对手（右侧）
-    def _search_bbox(center_x: int, center_y: int, sz: int) -> tuple[int, int, int, int]:
-        """以 (center_x,center_y) 为中心 sz 为尺寸，计算搜索范围，裁剪到画面内。"""
-        x = max(0, center_x - sz // 4)
-        y = max(0, center_y - sz // 4)
-        return x, y, min(sz * 2, w - x), min(sz * 2, h - y)
+    def _search_bbox(center_x: int, center_y: int, icon_sz: int) -> tuple[int, int, int, int]:
+        """以 (center_x,center_y) 为中心，计算搜索范围并裁剪到画面内。"""
+        x = max(0, center_x - icon_sz // 4)
+        y = max(0, center_y - icon_sz // 4)
+        return x, y, min(icon_sz * 2, w - x), min(icon_sz * 2, h - y)
 
     for side, sx in [("player", 0), ("opponent", small.shape[1] - small_roi_w)]:
         if side in skip_sides:
@@ -878,20 +908,18 @@ def detect_rank_icon(
             px, py, pw, ph = _search_bbox(cx, cy, csz)
             search_roi = screenshot[py:py + ph, px:px + pw]
 
-            best_name, best_score = None, 0.0
+            best_name, best_score = "", 0.0
             best_x = best_y = best_sz = 0
             for name in _RANK_LABELS:
-                for sz in range(max(30, csz - 15), min(csz + 18, pw, ph), 3):
-                    tmpl = _composite_rank_icon(name, sz, bg_color)
-                    if tmpl is None or tmpl.shape[0] >= search_roi.shape[0] or tmpl.shape[1] >= search_roi.shape[1]:
-                        continue
-                    res = cv2.matchTemplate(search_roi, tmpl, cv2.TM_CCOEFF_NORMED)
-                    _, val, _, loc = cv2.minMaxLoc(res)
-                    if val > best_score:
-                        best_score, best_name = val, name
-                        best_x, best_y = px + loc[0], py + loc[1]
-                        best_sz = sz
-            if best_score < threshold or best_name is None:
+                sz_start = max(30, csz - 15)
+                sz_end = min(csz + 18, pw, ph)
+                nm, sc, bx, by, bz = _match_icon_at_sizes(
+                    search_roi, name, range(sz_start, sz_end, 3),
+                    bg_color, px, py, strict_roi=True)
+                if sc > best_score:
+                    best_name, best_score = nm, sc
+                    best_x, best_y, best_sz = bx, by, bz
+            if best_score < threshold or best_name in ("", None):
                 continue
             name, score, rx, ry, rsz = best_name, best_score, best_x, best_y, best_sz
         else:

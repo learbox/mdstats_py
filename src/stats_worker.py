@@ -549,7 +549,6 @@ class StatsWorker(QThread):
                     else:
                         self.status_update.emit(
                             f"已识别: {coin_text}{rank_text} — 等待识别先后攻…")
-                    )
                     self._state = "WAITING_TURN"              # 状态前进一步
 
             elif self._state == "WAITING_TURN":

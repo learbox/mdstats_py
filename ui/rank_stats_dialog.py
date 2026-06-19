@@ -24,22 +24,20 @@
     未知段位（如未来新出的"黑铁"）统一归到 "无段位/其他" 分类。
 """
 
-import ctypes
-
-from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QPainter, QPixmap
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QApplication, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout,
+    QApplication, QComboBox, QFrame, QGridLayout, QHBoxLayout,
     QLabel, QPushButton, QVBoxLayout, QWidget,
 )
 
+from ui._base_dialog import _BaseFramelessDialog
 from src.config import get_project_root
 from src.recorder import (
     compute_filtered_stats, get_available_rank_tiers, load_records,
 )
 
 
-class RankStatsDialog(QDialog):
+class RankStatsDialog(_BaseFramelessDialog):
     """详细统计信息弹窗。
 
     主窗口点击"详细统计"按钮时打开。用户筛选卡组和己方段位，
@@ -56,34 +54,21 @@ class RankStatsDialog(QDialog):
         self._widget_bg = widget_bg    # 内容区背景色（如 "#ffffff"）
         self._main_bg = main_bg        # 主窗口背景色（如 "#f0f0f0"）
 
-        # ===== 背景图 =====
-        # bg_path 来自主窗口的 _tm.pixmap_paths["__settings_bg__"]
-        # 如果主题提供了背景图片，_bg_pixmap 就是该图片的 QPixmap
-        # 否则为 None（纯色主题，不走 paintEvent 贴图逻辑）
-        self._bg_pixmap: QPixmap | None = None
-        if bg_path:
-            pm = QPixmap(bg_path)
-            if not pm.isNull():
-                self._bg_pixmap = pm
+        # 背景图 + 拖拽（基类 _BaseFramelessDialog 提供）
+        self._init_background(bg_path)
+        self._init_drag()
 
-        # ===== 拖拽状态 =====
-        # 弹窗无系统标题栏，用户按住任意位置拖拽移动窗口
-        self._dragging = False          # 是否正在拖拽
-        self._drag_start = QPoint()     # 拖拽起始坐标
-
-        # ===== 窗口基本属性 =====
+        # 窗口基本属性
         self.setWindowTitle("详细统计")
-        # 无边框 + 独立窗口 + 模态对话框风格（但 exec 由调用方决定）
         self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint   # 去掉系统标题栏
-            | Qt.WindowType.Window              # 作为独立窗口显示
-            | Qt.WindowType.Dialog              # 对话框行为（置顶于父窗口）
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.Window
+            | Qt.WindowType.Dialog
         )
-        # WA_StyledBackground：告诉 Qt 用样式表绘制背景（而非系统默认）
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setMinimumSize(410, 390)   # 用户不能缩小到比这更小
-        self.resize(450, 430)           # 打开时的默认尺寸
-        self.setObjectName("rankStatsDialog")  # QSS 选择器用的 ID
+        self.setMinimumSize(410, 390)
+        self.resize(450, 430)
+        self.setObjectName("rankStatsDialog")
 
         # ===== 对话框背景色（双模式） =====
         # 把十六进制颜色 "#ffffff" 拆成 R、G、B 三个整数
@@ -247,37 +232,6 @@ class RankStatsDialog(QDialog):
         return bar
 
     # =========================================================================
-    # 拖拽 — 无边框窗口用鼠标按住任意位置拖动
-    # =========================================================================
-
-    def mousePressEvent(self, event):
-        """鼠标按下：记录起始位置，进入拖拽模式。
-
-        只响应左键。event.globalPosition() 返回鼠标在屏幕上的全局坐标，
-        frameGeometry().topLeft() 是窗口左上角的屏幕坐标，
-        两者相减得到鼠标在窗口内的相对位置（拖拽时保持这个相对位置不变）。
-        """
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._dragging = True
-            self._drag_start = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        """鼠标移动：如果在拖拽模式，计算新窗口位置并移动。
-
-        新位置 = 当前鼠标全局坐标 - 窗口内相对偏移。
-        这样窗口跟随鼠标移动，且不会"跳动"（保持按下的那一点相对窗口不变）。
-        """
-        if self._dragging:
-            self.move(event.globalPosition().toPoint() - self._drag_start)
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        """鼠标释放：退出拖拽模式。"""
-        self._dragging = False
-        super().mouseReleaseEvent(event)
-
-    # =========================================================================
     # 数据加载与下拉框填充
     # =========================================================================
 
@@ -316,57 +270,6 @@ class RankStatsDialog(QDialog):
         for tier in get_available_rank_tiers(records):
             self._rank_combo.addItem(tier)
         self._rank_combo.addItem("无段位/其他")  # 末尾：空白段位 + 未知段位
-
-    def _apply_dwm_round_corners(self) -> None:
-        """给无边框窗口加上 Windows 11 原生圆角。
-
-        调用 Windows DWM API（桌面窗口管理器），设置 DWM_WINDOW_CORNER_PREFERENCE
-        属性为 DWMWCP_ROUND（圆角模式）。
-
-        DWM 常量值:
-            DWMWA_WINDOW_CORNER_PREFERENCE = 33
-            DWMWCP_ROUND = 2
-        """
-        try:
-            hwnd = int(self.winId())             # Qt 窗口 → Windows 句柄
-            dwmwa = 33                            # 属性 ID：窗口圆角偏好
-            dwmwcp_round = 2                      # 值：圆角
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(  # type: ignore[attr-defined]
-                hwnd, dwmwa,
-                ctypes.byref(ctypes.c_int(dwmwcp_round)),
-                ctypes.sizeof(ctypes.c_int),
-            )
-        except Exception:
-            pass  # 非 Windows 系统或 DWM 不可用时静默跳过
-
-    # =========================================================================
-    # 背景绘制 — paintEvent
-    # =========================================================================
-
-    def paintEvent(self, event) -> None:
-        """手绘弹窗背景，兼容两种主题模式。
-
-        调用时机：Qt 需要重绘窗口时自动调用（窗口首次显示、尺寸变化、
-        被其他窗口遮挡后恢复等）。
-
-        逻辑：
-            - 有背景图（_bg_pixmap 不为 None）：先用 QPainter 把背景图
-              缩放并贴满整个窗口，再调用 super().paintEvent() 让 Qt 绘制
-              子控件。子控件（内容区）的半透明背景就会透出底图。
-            - 无背景图（纯色主题）：直接走 super().paintEvent()，
-              由样式表 background-color 提供纯色背景。
-        """
-        painter = QPainter(self)
-        if self._bg_pixmap is not None:
-            # 把背景图缩放至窗口大小，拉伸填充（不保持比例）
-            scaled = self._bg_pixmap.scaled(
-                self.size(),
-                Qt.AspectRatioMode.IgnoreAspectRatio,          # 不保持原图比例
-                Qt.TransformationMode.SmoothTransformation,    # 平滑缩放（抗锯齿）
-            )
-            painter.drawPixmap(0, 0, scaled)  # 在窗口 (0,0) 位置绘制
-        painter.end()  # 结束 QPainter 绘画，释放绘图资源
-        super().paintEvent(event)  # 让 Qt 继续绘制子控件和样式表背景
 
     # =========================================================================
     # 统计刷新

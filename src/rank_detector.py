@@ -27,9 +27,7 @@
 """
 
 
-import time
-
-import numpy as np
+import cv2
 from PySide6.QtCore import QThread, Signal
 
 from src import capture as _cap
@@ -166,7 +164,7 @@ class RankDetector(QThread):
             # ---- 截图 ----
             try:
                 screenshot = _cap.capture_window("masterduel")
-            except Exception:
+            except OSError:
                 self.msleep(int(self._interval * 1000))
                 continue
 
@@ -187,7 +185,7 @@ class RankDetector(QThread):
             try:
                 result = _det.detect_rank_icon(screenshot, self._threshold,
                                                skip_sides=skip or None)
-            except Exception:
+            except (cv2.error, ValueError):
                 result = {}  # 检测异常时返回空结果，下一轮重试
 
             # ---- 合并多次检测结果 ----
@@ -202,7 +200,9 @@ class RankDetector(QThread):
                 self._result = result  # 第一次检测，直接保存
 
             # ---- 双方都检测到 → 发射信号并暂停 ----
-            if (self._result.get("player_rank") and self._result.get("opponent_rank")):
+            if (self._result is not None
+                    and self._result.get("player_rank")
+                    and self._result.get("opponent_rank")):
                 self.rank_icon_detected.emit(dict(self._result))
                 self._paused = True  # 暂停截图，等待主窗口通知下一局
 
