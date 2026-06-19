@@ -10,6 +10,8 @@
 
 支持 8 种段位：新手、青铜、白银、黄金、铂金、钻石、大师、巅峰。
 
+> **注意**：因 KONAMI 版权，段位图标源素材不包含在仓库中。使用前需用 AssetRipper 从游戏资源包提取 9 张 PNG，放入 `resource/templates/rankicons/`。详见 `resource/templates/README.md`。
+
 ## 核心原理
 
 ### 1. RGBA 背景自适应合成
@@ -32,14 +34,25 @@ composite = source_bgr × alpha + bg_sample × (1 - alpha)
 
 首次检测到段位后自动记录 `(分辨率, 侧) → (x, y, 尺寸)` 到 `rank_positions.toml`。后续同分辨率检测仅搜索缓存位置附近 2 倍图标大小区域，跳过缩略图全搜。
 
-### 4. 数字等级识别（列投影峰值法）
+### 4. 数字等级识别（列投影峰值法 + 峰宽分析）
 
-段位图标下方裁 22%×11% 区域，二值化后统计每列暗像素和（列投影），数峰值个数：
+段位图标下方裁取 22%×11.5% 区域，二值化后统计每列暗像素和得到列投影曲线。
+通过峰值个数和峰宽联合判定 I~V：
 
-- 1 峰 = I
-- 2 窄峰 = II
-- 3 峰 = III
-- 2 峰（一窄一宽）= IV
+```
+峰数  峰宽特征             判定
+────  ──────────────────   ────
+1 峰  窄峰（< 字符区 25%）  I
+1 峰  宽峰（≥ 字符区 25%）  V     ← 两斜线在列投影中融合为平顶山
+2 峰  等宽窄峰              II
+2 峰  宽峰/窄峰 > 1.8       IV
+3 峰                        III
+```
+
+**为什么 V 只有 1 个峰？** V 的两条斜线不是垂直线——它们从顶部向外展开，在列投影中每一列都有两条线的覆盖，形成一片连续的"平顶山"。
+
+**置信度计算**：不硬编码固定值，而是基于（离判定边界的距离 × 峰谷清晰度）动态计算。
+低于 `confidence_threshold` 的结果丢弃（tier=None），CSV 只写段位名不带等级。
 
 ## 架构
 
@@ -48,11 +61,13 @@ RankDetector (QThread)
   ├─ 独立截图循环 (0.5s)
   ├─ 窗口最小化/关闭时暂停
   ├─ 检测到一方后跳过该侧继续搜另一方
-  └─ 双方齐或阶段2踩停 → emit rank_icon_detected
+  ├─ 双方齐 → emit rank_icon_detected + 暂停
+  └─ 对局结束 → resume_for_next_game() 清缓存恢复
          ↓
   main_window._on_rank_icon_detected()
          ↓
-  状态栏: "段位: 铂金 II vs 钻石 I"
+  状态栏（默认）: "段位: 铂金 II vs 钻石 I"
+  状态栏（show_confidence）: "段位: 铂金 (0.92) II (0.82) vs 钻石 (0.83) I (0.75)"
   CSV: 己方段位列 / 对方段位列
 ```
 
@@ -62,7 +77,10 @@ RankDetector (QThread)
 [rank_detection]
 enabled = true              # 启用段位检测
 interval = 0.5              # 截图间隔（秒）
-confidence_threshold = 0.7  # 匹配阈值
+confidence_threshold = 0.7  # 图标 NCC 匹配阈值 + 等级判读阈值（共用）
+
+[debug]
+show_confidence = false     # 状态栏显示置信度分数
 ```
 
 ## 故障恢复
