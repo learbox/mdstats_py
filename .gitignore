@@ -24,6 +24,9 @@ logs/
 # Temp
 *.bak
 
+# Copyrighted assets (user must provide from game)
+resource/templates/rankicons/*.png
+
 # OS
 Thumbs.db
 _test/
