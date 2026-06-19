@@ -551,3 +551,72 @@ def compute_stats(records: list[dict[str, str]]) -> list[dict[str, str | int]]:
     })
 
     return stats
+
+
+def compute_rank_stats(
+    records: list[dict[str, str]], deck: str = "",
+) -> list[dict[str, str | int]]:
+    """统计当前卡组 vs 各对手段位大段的胜率。
+
+    只按段位大段分组（如"铂金 II"和"铂金 III"都归入"铂金"），
+    未指定段位的对局归入"未知"。
+
+    Args:
+        records: load_records() 返回的对局记录列表。
+        deck:    筛选的卡组名，空字符串=全部卡组。
+
+    Returns:
+        按段位排序的统计列表，含"合计"行。
+    """
+    # 段位顺序
+    RANK_ORDER = ["新手", "青铜", "白银", "黄金", "铂金", "钻石", "大师", "巅峰"]
+
+    def _tier_group(rank_str: str) -> str:
+        """从'铂金 II'提取'铂金'，未知归'未知'。"""
+        for tier in RANK_ORDER:
+            if rank_str.startswith(tier):
+                return tier
+        return "未知"
+
+    def _rate(win: int, total: int) -> str:
+        if total == 0:
+            return "-"
+        return f"{win / total * 100:.1f}%"
+
+    # 按大段分组计数：{段位: {"total":, "win":, "lose":}}
+    ranks: dict[str, dict] = {r: {"total": 0, "win": 0, "lose": 0} for r in RANK_ORDER}
+    ranks["未知"] = {"total": 0, "win": 0, "lose": 0}
+
+    total_all = win_all = lose_all = 0
+
+    for r in records:
+        if deck and r.get("使用卡组", "") != deck:
+            continue
+        group = _tier_group(r.get("对方段位", ""))
+        ranks[group]["total"] += 1
+        total_all += 1
+        if r.get("结果", "") == "胜":
+            ranks[group]["win"] += 1
+            win_all += 1
+        else:
+            ranks[group]["lose"] += 1
+            lose_all += 1
+
+    stats = []
+    for rank_name in RANK_ORDER + ["未知"]:
+        d = ranks[rank_name]
+        if d["total"] > 0 or rank_name == "未知":
+            stats.append({
+                "段位": rank_name,
+                "对局数": d["total"], "胜": d["win"], "负": d["lose"],
+                "胜率": _rate(d["win"], d["total"]),
+            })
+
+    if total_all > 0:
+        stats.append({
+            "段位": "合计",
+            "对局数": total_all, "胜": win_all, "负": lose_all,
+            "胜率": _rate(win_all, total_all),
+        })
+
+    return stats

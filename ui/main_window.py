@@ -96,6 +96,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSplitter,
     QStyledItemDelegate,
+    QAbstractItemView,
     QTableWidget,
     QToolButton,
     QWidget,
@@ -634,7 +635,44 @@ class MainWindow(QMainWindow):
         if root_layout is not None:
             root_layout.insertWidget(0, self._title_bar)  # type: ignore[attr-defined]
 
-        self.setCentralWidget(content)
+        # ---- 7b. 右侧折叠面板（对手段位胜率统计） ----
+        self._rank_panel_visible = False
+        self._rank_panel_width = 260
+
+        # 展开/收起按钮
+        self._btn_toggle_rank = QPushButton("▸")
+        self._btn_toggle_rank.setFixedWidth(24)
+        self._btn_toggle_rank.setFlat(True)
+        self._btn_toggle_rank.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_toggle_rank.setToolTip("展开对手段位胜率统计")
+        self._btn_toggle_rank.clicked.connect(self._toggle_rank_panel)
+
+        # 右侧面板
+        self._rank_panel = QWidget()
+        self._rank_panel.setFixedWidth(self._rank_panel_width)
+        panel_layout = QVBoxLayout(self._rank_panel)
+        panel_layout.setContentsMargins(8, 4, 8, 4)
+        panel_layout.setSpacing(4)
+        panel_title = QLabel("对手段位胜率（当前卡组）")
+        panel_layout.addWidget(panel_title)
+        self._rank_stats_table = QTableWidget(0, 5)
+        self._rank_stats_table.setHorizontalHeaderLabels(
+            ["段位", "对局", "胜", "负", "胜率"])
+        self._rank_stats_table.horizontalHeader().setStretchLastSection(True)
+        self._rank_stats_table.verticalHeader().setDefaultSectionSize(24)
+        self._rank_stats_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        panel_layout.addWidget(self._rank_stats_table)
+        self._rank_panel.hide()
+
+        # 水平容器包裹原内容 + 按钮 + 面板
+        container = QWidget()
+        container_layout = QHBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(0)
+        container_layout.addWidget(content, 1)
+        container_layout.addWidget(self._btn_toggle_rank)
+        container_layout.addWidget(self._rank_panel)
+        self.setCentralWidget(container)
 
         # 事件过滤器: 让子控件（content widget）的鼠标事件也能触发边缘 resize
         content.setMouseTracking(True)
@@ -1410,11 +1448,48 @@ class MainWindow(QMainWindow):
     # =========================================================================
 
     def _reload_tables(self) -> None:
-        """重新加载 CSV 数据并刷新两个表格（统计 + 记录）。"""
+        """重新加载 CSV 数据并刷新两个表格（统计 + 记录）+ 段位面板。"""
         self._refresh_stats_table()
         self._refresh_record_table()
+        if self._rank_panel_visible:
+            self._refresh_rank_stats()
         # 表格填充后即恢复列宽，不依赖 QTimer 时序，调用幂等无副作用
         self._restore_column_widths()
+
+    # =========================================================================
+    # 对手段位胜率面板
+    # =========================================================================
+
+    def _toggle_rank_panel(self) -> None:
+        """展开/收起对手段位胜率统计面板。"""
+        self._rank_panel_visible = not self._rank_panel_visible
+        if self._rank_panel_visible:
+            self._rank_panel.show()
+            self._btn_toggle_rank.setText("◂")
+            self._btn_toggle_rank.setToolTip("收起对手段位胜率统计")
+            self._refresh_rank_stats()
+        else:
+            self._rank_panel.hide()
+            self._btn_toggle_rank.setText("▸")
+            self._btn_toggle_rank.setToolTip("展开对手段位胜率统计")
+
+    def _refresh_rank_stats(self) -> None:
+        """刷新对手段位胜率表格。"""
+        from src.recorder import load_records, compute_rank_stats
+        records = load_records()
+        deck = self._deck_input.text().strip()
+        stats = compute_rank_stats(records, deck)
+
+        table = self._rank_stats_table
+        table.setRowCount(0)
+        for row_data in stats:
+            row = table.rowCount()
+            table.insertRow(row)
+            for col, key in enumerate(["段位", "对局数", "胜", "负", "胜率"]):
+                val = row_data.get(key, "")
+                item = QTableWidgetItem(str(val))
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                table.setItem(row, col, item)
 
     def _refresh_stats_table(self) -> None:
         """刷新统计表格（上方表格）。
