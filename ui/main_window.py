@@ -96,9 +96,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSplitter,
     QStyledItemDelegate,
-    QAbstractItemView,
-    QHBoxLayout,
-    QVBoxLayout,
     QTableWidget,
     QToolButton,
     QWidget,
@@ -637,48 +634,7 @@ class MainWindow(QMainWindow):
         if root_layout is not None:
             root_layout.insertWidget(0, self._title_bar)  # type: ignore[attr-defined]
 
-        # ---- 7b. 右侧折叠面板（对手段位胜率统计） ----
-        self._rank_panel_visible = False
-        self._rank_panel_width = 260
-
-        # 展开/收起按钮
-        self._btn_toggle_rank = QPushButton("▸")
-        self._btn_toggle_rank.setFixedWidth(22)
-        self._btn_toggle_rank.setFixedHeight(60)
-        self._btn_toggle_rank.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_toggle_rank.setToolTip("展开对手段位胜率统计")
-        self._btn_toggle_rank.setStyleSheet(
-            "QPushButton { background: #555; color: white; border: none; "
-            "border-radius: 4px; font-size: 12px; padding: 0px; }"
-            "QPushButton:hover { background: #888; }")
-        self._btn_toggle_rank.clicked.connect(self._toggle_rank_panel)
-
-        # 右侧面板
-        self._rank_panel = QWidget()
-        self._rank_panel.setFixedWidth(self._rank_panel_width)
-        panel_layout = QVBoxLayout(self._rank_panel)
-        panel_layout.setContentsMargins(8, 4, 8, 4)
-        panel_layout.setSpacing(4)
-        panel_title = QLabel("vs 对手段位 — 我的胜率")
-        panel_layout.addWidget(panel_title)
-        self._rank_stats_table = QTableWidget(0, 5)
-        self._rank_stats_table.setHorizontalHeaderLabels(
-            ["段位", "对局", "胜", "负", "胜率"])
-        self._rank_stats_table.horizontalHeader().setStretchLastSection(True)
-        self._rank_stats_table.verticalHeader().setDefaultSectionSize(24)
-        self._rank_stats_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        panel_layout.addWidget(self._rank_stats_table)
-        self._rank_panel.hide()
-
-        # 水平容器包裹原内容 + 按钮 + 面板
-        container = QWidget()
-        container_layout = QHBoxLayout(container)
-        container_layout.setContentsMargins(0, 0, 0, 0)
-        container_layout.setSpacing(0)
-        container_layout.addWidget(content, 1)
-        container_layout.addWidget(self._btn_toggle_rank)
-        container_layout.addWidget(self._rank_panel)
-        self.setCentralWidget(container)
+        self.setCentralWidget(content)
 
         # 事件过滤器: 让子控件（content widget）的鼠标事件也能触发边缘 resize
         content.setMouseTracking(True)
@@ -703,6 +659,7 @@ class MainWindow(QMainWindow):
         self._btn_undo         = _require_widget(content.findChild(QPushButton, "btn_undo"), "btn_undo")
         self._btn_lock_deck    = _require_widget(content.findChild(QPushButton, "btn_lock_deck"), "btn_lock_deck")
         self._btn_lock_deck.setText("锁定卡组")  # 初始: 输入框未锁定
+        self._btn_rank_stats   = _require_widget(content.findChild(QPushButton, "btn_rank_stats"), "btn_rank_stats")
         self._stats_table      = _require_widget(content.findChild(QTableWidget, "stats_table"), "stats_table")
         self._record_table     = _require_widget(content.findChild(QTableWidget, "record_table"), "record_table")
         self._btn_reload       = _require_widget(content.findChild(QToolButton, "btn_reload"), "btn_reload")
@@ -729,6 +686,7 @@ class MainWindow(QMainWindow):
         self._btn_undo.clicked.connect(self._on_undo)
         self._btn_lock_deck.clicked.connect(self._on_toggle_deck_lock)
         self._btn_reload.clicked.connect(self._on_load_data)
+        self._btn_rank_stats.clicked.connect(self._open_rank_stats)
 
         # QToolButton MenuButtonPopup 模式：左侧点击加载数据，右侧箭头弹出菜单
         reload_menu = QMenu(self._btn_reload)
@@ -1454,48 +1412,11 @@ class MainWindow(QMainWindow):
     # =========================================================================
 
     def _reload_tables(self) -> None:
-        """重新加载 CSV 数据并刷新两个表格（统计 + 记录）+ 段位面板。"""
+        """重新加载 CSV 数据并刷新两个表格（统计 + 记录）。"""
         self._refresh_stats_table()
         self._refresh_record_table()
-        if self._rank_panel_visible:
-            self._refresh_rank_stats()
         # 表格填充后即恢复列宽，不依赖 QTimer 时序，调用幂等无副作用
         self._restore_column_widths()
-
-    # =========================================================================
-    # 对手段位胜率面板
-    # =========================================================================
-
-    def _toggle_rank_panel(self) -> None:
-        """展开/收起对手段位胜率统计面板。"""
-        self._rank_panel_visible = not self._rank_panel_visible
-        if self._rank_panel_visible:
-            self._rank_panel.show()
-            self._btn_toggle_rank.setText("◂")
-            self._btn_toggle_rank.setToolTip("收起对手段位胜率统计")
-            self._refresh_rank_stats()
-        else:
-            self._rank_panel.hide()
-            self._btn_toggle_rank.setText("▸")
-            self._btn_toggle_rank.setToolTip("展开对手段位胜率统计")
-
-    def _refresh_rank_stats(self) -> None:
-        """刷新对手段位胜率表格。"""
-        from src.recorder import load_records, compute_rank_stats
-        records = load_records()
-        deck = self._deck_input.text().strip()
-        stats = compute_rank_stats(records, deck)
-
-        table = self._rank_stats_table
-        table.setRowCount(0)
-        for row_data in stats:
-            row = table.rowCount()
-            table.insertRow(row)
-            for col, key in enumerate(["段位", "对局数", "胜", "负", "胜率"]):
-                val = row_data.get(key, "")
-                item = QTableWidgetItem(str(val))
-                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                table.setItem(row, col, item)
 
     def _refresh_stats_table(self) -> None:
         """刷新统计表格（上方表格）。
@@ -1856,6 +1777,19 @@ class MainWindow(QMainWindow):
                 subprocess.Popen(["xdg-open", csv_dir])
         except OSError:
             pass  # 打开失败时静默忽略
+
+    def _open_rank_stats(self) -> None:
+        """打开详细统计信息弹窗。"""
+        from ui.rank_stats_dialog import RankStatsDialog
+        bg_path = (self._tm.pixmap_paths.get("__settings_bg__")
+                   if self._tm.pixmap_paths else "")
+        dialog = RankStatsDialog(
+            self, self._config, self._tm.colors,
+            bg_path=bg_path,
+            widget_bg=self._tm.colors.get("widget_bg", "#ffffff"),
+            main_bg=self._tm.colors.get("main_bg", "#f0f0f0"),
+        )
+        dialog.exec()
 
     def _on_settings(self) -> None:
         """打开图形化设置弹窗，确定后自动写配置 + 重载。

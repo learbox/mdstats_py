@@ -620,3 +620,22 @@ def compute_rank_stats(
         })
 
     return stats
+
+
+def compute_filtered_stats(
+    records: list[dict[str, str]],
+    deck: str = "",
+    opponent_rank: str = "",
+) -> dict[str, str | int]:
+    """按卡组和对方段位筛选后，返回单行 17 项统计指标。"""
+    filtered = []
+    for r in records:
+        if deck and r.get("使用卡组", "") != deck:
+            continue
+        if opponent_rank:
+            opp = r.get("对方段位", "")
+            if not opp.startswith(opponent_rank):
+                continue
+        filtered.append(r)
+    result = compute_stats(filtered)
+    return result[0] if result else compute_stats([])[0]
