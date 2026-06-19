@@ -658,10 +658,9 @@ def _detect_tier_number(
         4. 数列投影中的峰值个数 = 罗马数字的"竖线"数量
            I = 1 个峰, III = 3 个峰
 
-        特殊情况 II / IV / V（三者都是 2 峰）：
-           II = 两竖，峰都窄     → avg 峰宽 < 28% 字符宽
-           IV = 一竖 + V形       → 宽峰 > 窄峰 × 1.8
-           V  = 两斜线，峰都较宽 → avg 峰宽 ≥ 28% 字符宽（置信度较低）
+        特殊情况 II / IV / V（三者列投影都是 2 峰）：
+           先用连通域分析区分 V（1个域=两臂相连）vs II/IV（2+个域=笔画分离），
+           再用峰宽比区分 II（两窄峰）vs IV（一窄一宽 > 1.8倍）。
 
     Args:
         screenshot: 原始分辨率截图
@@ -709,34 +708,39 @@ def _detect_tier_number(
     if n_peaks <= 0:
         return None, 0.0
 
-    # ---- 2 峰特殊处理：II / IV / V ----
-    # II = 两竖，IV = 一竖 + V形，V = 两斜线。
-    # 列投影里三者都是 2 峰，区别在峰的宽度：
-    #   - II: 两个都很窄（竖线投影宽度小）
-    #   - IV: 一窄（I）+ 一宽（V 的斜线投影比竖线宽）
-    #   - V:  两个都比较宽（两条斜线都占多列）
+    # ---- 连通域分析：区分 V vs II/IV ----
+    # V = 两斜线底部相交 → 1 个连通域, 列投影 2 峰
+    # II = 两竖线完全分离 → 2 个连通域
+    # IV = I竖线 + V形分离 → 2 个连通域
+    # 连通域数量是拓扑属性，不依赖阈值猜测，比峰宽判断更可靠。
+    num_labels, labels = cv2.connectedComponents(bin_img)
+    # 过滤背景（label 0）+ 面积 < 5px 的噪点
+    comp_areas = [np.sum(labels == i) for i in range(1, num_labels)
+                  if np.sum(labels == i) >= 5]
+    n_components = len(comp_areas)
+
     if n_peaks == 2:
-        # 计算每个峰的宽度
-        peak_widths = []
-        in_peak = False
-        w_start = 0
-        for i, v in enumerate(proj):
-            if v > peak_th and not in_peak:
-                in_peak = True
-                w_start = i
-            elif v <= peak_th * 0.5 and in_peak:
-                in_peak = False
-                peak_widths.append(i - w_start)
-        if len(peak_widths) >= 2:
-            wide_ratio = max(peak_widths) / max(min(peak_widths), 1)
-            total_w = len(proj)
-            avg_w = sum(peak_widths) / len(peak_widths)
-            if wide_ratio > 1.8:
-                return 4, 0.6  # IV: 一宽一窄，宽的是 V 形笔画
-            # V 的斜线投影约占字符宽的 28% 以上（竖线一般 < 25%）
-            if avg_w > total_w * 0.28:
-                return 5, 0.5  # V: 两斜线，置信度较低（与 II 有重叠区间）
-            return 2, 0.8      # II: 两竖线
+        if n_components == 1:
+            # 1 个连通域但有 2 个投影峰 → V 的两臂在底部相连
+            return 5, 0.7
+        # 2+ 连通域 → II 或 IV，用峰宽比区分
+        if n_components >= 2:
+            peak_widths = []
+            in_peak = False
+            w_start = 0
+            for i, v in enumerate(proj):
+                if v > peak_th and not in_peak:
+                    in_peak = True
+                    w_start = i
+                elif v <= peak_th * 0.5 and in_peak:
+                    in_peak = False
+                    peak_widths.append(i - w_start)
+            if len(peak_widths) >= 2:
+                wide_ratio = max(peak_widths) / max(min(peak_widths), 1)
+                if wide_ratio > 1.8:
+                    return 4, 0.6  # IV: 一窄（I）+ 一宽（V形笔画）
+                return 2, 0.8      # II: 两竖线
+            return 2, 0.8  # fallback
 
     if n_peaks == 1:
         return 1, 0.8   # I（也可能 V 的两个斜线在低分辨率下合并为 1 峰）
