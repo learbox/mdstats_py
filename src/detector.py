@@ -645,6 +645,7 @@ def _detect_rank_in_roi(
 
 def _detect_tier_number(
     screenshot: np.ndarray, rank_x: int, rank_y: int, rank_w: int,
+    threshold: float = 0.7,
 ) -> tuple[int | None, float]:
     """识别段位图标下方的罗马数字等级（I~V）。
 
@@ -669,9 +670,10 @@ def _detect_tier_number(
         screenshot: 原始分辨率截图
         rank_x, rank_y: 段位图标左上角坐标
         rank_w: 段位图标尺寸（宽=高）
+        threshold: 等级置信度阈值，低于此值返回 None（默认 0.7）
 
     Returns:
-        (数字 1-5 | None, 置信度)。None 表示无法识别（如区域越界）。
+        (数字 1-5 | None, 置信度)。置信度 < threshold 时数字为 None。
     """
     h, w = screenshot.shape[:2]
 
@@ -753,8 +755,6 @@ def _detect_tier_number(
     #   II  = 2 个等宽窄峰（两根分离竖线）
     #   IV  = 2 个峰，一窄(I) + 一宽(V形)，宽窄比 > 1.8
     #   III = 3 个窄峰
-    TIER_CONFIDENCE_THRESHOLD = 0.5  # 低于此值的等级判定视为不可靠，丢弃
-
     if n_peaks == 1:
         widths = _measure_peaks(proj, peak_th)
         if not widths:
@@ -763,13 +763,13 @@ def _detect_tier_number(
         if peak_ratio > 0.25:
             # V: 宽峰，离 0.25 越远越确定
             conf = round(_conf(peak_ratio - 0.25, 0.25) * clarity, 2)
-            if conf >= TIER_CONFIDENCE_THRESHOLD:
+            if conf >= threshold:
                 return 5, conf
             return None, conf
         else:
             # I: 窄峰
             conf = round(_conf(0.25 - peak_ratio, 0.12) * clarity, 2)
-            if conf >= TIER_CONFIDENCE_THRESHOLD:
+            if conf >= threshold:
                 return 1, conf
             return None, conf
 
@@ -780,20 +780,20 @@ def _detect_tier_number(
             if wide_ratio > 1.8:
                 # IV: 宽峰/窄峰比离 1.8 越远越确定
                 conf = round(_conf(wide_ratio - 1.8, 1.0) * clarity, 2)
-                if conf >= TIER_CONFIDENCE_THRESHOLD:
+                if conf >= threshold:
                     return 4, conf
                 return None, conf
             else:
                 # II: 等宽峰
                 conf = round(_conf(1.8 - wide_ratio, 1.0) * clarity, 2)
-                if conf >= TIER_CONFIDENCE_THRESHOLD:
+                if conf >= threshold:
                     return 2, conf
                 return None, conf
         return None, 0.0
 
     if n_peaks == 3:
         conf = round(0.8 * clarity, 2)
-        if conf >= TIER_CONFIDENCE_THRESHOLD:
+        if conf >= threshold:
             return 3, conf
         return None, conf
 
@@ -937,7 +937,7 @@ def detect_rank_icon(
         result[f"{side}_score"] = score
         # 巅峰不检测等级数字（_NO_TIER_RANKS）
         if rank_label not in _NO_TIER_RANKS:
-            tier, _ = _detect_tier_number(screenshot, rx, ry, rsz)
+            tier, _ = _detect_tier_number(screenshot, rx, ry, rsz, threshold)
             result[f"{side}_tier"] = tier
 
     return result
