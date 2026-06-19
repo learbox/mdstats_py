@@ -587,10 +587,11 @@ class MainWindow(QMainWindow):
         self._wait_timer: QTimer | None = None# 等待游戏启动的轮询定时器
         self._info_timer: QTimer | None = None# 右下角信息标签刷新定时器
         self._match = MatchState()               # 三阶段对局状态机
-        self._rank_detector = None                # 段位图标检测线程（延迟创建）
-        self._rank_icon_result: dict | None = None  # 段位图标检测结果
-        # rank_detected 在硬币阶段触发，但写入 CSV 需等到胜负阶段 —
-        # 中间隔着先后攻和对局本身，所以需要缓存。
+        self._rank_detector: RankDetector | None = None  # 段位图标检测线程（启动时按配置创建）
+        self._rank_icon_result: dict | None = None        # 段位图标检测结果暂存
+        # 段位图标在硬币阶段（阶段1）显示，但数据要到对局结束才写入 CSV。
+        # 检测结果先存在 _rank_icon_result，对局结束时取出写入记录。
+        # _rank_icon_strs() 负责提取并清除缓存（每次对局最多调用一次）。
         self._suppress_cell_changed: bool = False # 刷新记录表时抑制 cellChanged（避免误写 CSV）
         self._cols_restored: bool = False     # 列宽是否已从持久化文件恢复
 
@@ -1063,11 +1064,14 @@ class MainWindow(QMainWindow):
 
         self._worker.start()
 
-        # 段位检测独立线程（按配置启用）
+        # ---- 段位图标检测线程 ----
+        # 独立于主管线运行，以可配置间隔持续检测双方段位图标。
+        # rank_icon_detected 信号在双方都检测到后发射，
+        # 主窗口收到信号后更新状态栏 + 暂存结果等对局结束写入 CSV。
         if self._config.get("rank_detection", {}).get("enabled", True):
             self._rank_detector = RankDetector()
             self._rank_detector.rank_icon_detected.connect(self._on_rank_icon_detected)
-            self._rank_detector.start()
+            self._rank_detector.start()  # QThread.start() → 后台独立线程执行 run()
         self._snapshot_ctrl.sync_hotkeys()
 
         # 更新 UI 状态: 禁用启动、启用停止、锁定卡组、禁用危险按钮
@@ -1138,25 +1142,44 @@ class MainWindow(QMainWindow):
         self._match.set_rank(rank)
 
     def _on_rank_icon_detected(self, rank_info: dict) -> None:
-        """自动识别到段位图标（Platinum II 等）→ 缓存结果 + 状态栏通知。"""
+        """段位图标检测线程回调：收到双方段位 → 暂存结果 + 状态栏通知。
+
+        这个槽连接到 RankDetector.rank_icon_detected 信号。
+        信号在双方段位都检测到后发射（player 和 opponent 都有值）。
+
+        虽然这里就收到了结果，但不立即写入 CSV——因为对局还没结束。
+        结果暂存在 _rank_icon_result，等对局结束时 _rank_icon_strs() 取出。
+
+        rank_info 格式:
+            {"player_rank": "铂金", "player_tier": 2, "player_score": 0.92,
+             "opponent_rank": "钻石", "opponent_tier": 1, "opponent_score": 0.88}
+        """
         self._rank_icon_result = rank_info
 
+        # 格式化段位字符串用于状态栏显示
         def _fmt(key: str) -> str:
             rank = rank_info.get(f"{key}_rank") or "?"
             tier = rank_info.get(f"{key}_tier")
             if isinstance(tier, int) and 1 <= tier <= 5:
-                tier_str = ["", "I", "II", "III", "IV", "V"][tier]
+                tier_str = ["", "I", "II", "III", "IV", "V"][tier]  # 1→I, 2→II...
                 return f"{rank} {tier_str}"
-            return rank
+            return rank  # 巅峰没有等级数字
 
         player = _fmt("player")
         opponent = _fmt("opponent")
         self._show_status(f"段位: {player} vs {opponent}")
 
     def _rank_icon_strs(self) -> tuple[str, str]:
-        """从缓存的段位图标结果提取己方/对方段位字符串，如 "铂金 II"。"""
+        """取出缓存的段位图标结果，返回 (己方段位字符串, 对方段位字符串)。
+
+        调用后缓存被清空（取后即焚），保证每次对局最多用一次。
+        RankDetector 可能检测到多次（如连续两帧都匹配到），但只有第一次有效。
+
+        Returns:
+            ("铂金 II", "钻石 I") 或 ("", "") 表示未检测到
+        """
         info = self._rank_icon_result
-        self._rank_icon_result = None
+        self._rank_icon_result = None  # 取后清空
         if not info:
             return "", ""
         result = []
@@ -1167,6 +1190,7 @@ class MainWindow(QMainWindow):
                 tier_str = ["", "I", "II", "III", "IV", "V"][tier]
             else:
                 tier_str = ""
+            # "铂金 II" 或 "巅峰"（无等级数字）
             result.append(f"{rank} {tier_str}".strip() if tier_str else rank)
         return result[0], result[1]
 
@@ -1205,19 +1229,20 @@ class MainWindow(QMainWindow):
         rank_cache = cached["rank"]
         result_text = "胜" if result == "win" else "负"
 
-        # 段位图标信息
+        # 段位图标信息：从 RankDetector 缓存取出（如 "铂金 II"、"钻石 I"）
+        # _rank_icon_strs() 取后清除缓存，保证同一局不会重复写入
         player_rank, opponent_rank = self._rank_icon_strs()
         new_record = add_record(coin_win=self._match.coin_cache,
                                 turn=self._match.turn_cache,
                                 result=result,
                                 deck=self._deck_input.text().strip(),
                                 rank=self._match.rank_cache,
-                                player_rank=player_rank,
-                                opponent_rank=opponent_rank)
+                                player_rank=player_rank,       # 写入 CSV 己方段位列
+                                opponent_rank=opponent_rank)   # 写入 CSV 对方段位列
 
         self._reset_stage()
         self._reload_tables()
-        # 通知段位检测线程继续监听下一局
+        # 对局完成 → 通知段位检测线程准备搜索下一局的段位图标
         if self._rank_detector is not None:
             self._rank_detector.resume_for_next_game()
 
@@ -1293,7 +1318,8 @@ class MainWindow(QMainWindow):
             self._show_status(f"手动: {turn_text} — 请选择胜负")
 
         elif self._match.stage == 2:
-            # 阶段2: 选择胜/负 → 完成一局，写入 CSV
+            # 阶段2: 手动选择胜/负 → 一局完成，写入 CSV
+            # 同样取出段位图标检测结果（如果有的话）
             player_rank, opponent_rank = self._rank_icon_strs()
             new_record = add_record(coin_win=self._match.coin_cache,
                                     turn=self._match.turn_cache,
@@ -1302,7 +1328,7 @@ class MainWindow(QMainWindow):
                                     rank=self._match.rank_cache,
                                     player_rank=player_rank,
                                     opponent_rank=opponent_rank)
-            # 先提取通知信息，再 reset
+            # 先提取通知信息，再 reset（reset 会清空缓存）
             cached = self._match.snapshot()
             coin_cache = cached["coin"]
             turn_cache = cached["turn"]
@@ -1311,6 +1337,7 @@ class MainWindow(QMainWindow):
             self._reset_stage()
             self._sync_worker_stage()
             self._reload_tables()
+            # 对局完成 → 段位检测线程准备下一局
             if self._rank_detector is not None:
                 self._rank_detector.resume_for_next_game()
             if new_record is not None:
@@ -1779,8 +1806,20 @@ class MainWindow(QMainWindow):
             pass  # 打开失败时静默忽略
 
     def _open_rank_stats(self) -> None:
-        """打开详细统计信息弹窗。"""
+        """打开详细统计信息弹窗（模态）。
+
+        弹窗展示按卡组+己方段位筛选的 17 项统计指标：
+            - 段位下拉从 CSV 数据动态生成（只显示实际出现过的段位）
+            - 未知段位归入"无段位/其他"
+            - 支持拖拽移动、一键复制、背景图主题半透明效果
+
+        视觉参数从当前主题提取，保证弹窗外观与主窗口一致：
+            - bg_path: 背景图路径（macaron 等有图主题）
+            - widget_bg: 内容区背景色
+            - main_bg: 对话框底色（纯色主题用偏移值形成对比）
+        """
         from ui.rank_stats_dialog import RankStatsDialog
+        # 如果主题提供了 __settings_bg__ 背景图，传给弹窗做半透明效果
         bg_path = (self._tm.pixmap_paths.get("__settings_bg__")
                    if self._tm.pixmap_paths else "")
         dialog = RankStatsDialog(
@@ -1789,7 +1828,7 @@ class MainWindow(QMainWindow):
             widget_bg=self._tm.colors.get("widget_bg", "#ffffff"),
             main_bg=self._tm.colors.get("main_bg", "#f0f0f0"),
         )
-        dialog.exec()
+        dialog.exec()  # exec() = 模态弹窗，阻塞直到用户关闭
 
     def _on_settings(self) -> None:
         """打开图形化设置弹窗，确定后自动写配置 + 重载。

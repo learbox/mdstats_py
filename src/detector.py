@@ -373,31 +373,62 @@ def get_last_score() -> float:
 
 # =============================================================================
 # 段位图标检测（源素材 + 背景色合成 + NCC 匹配）
+#
+# 总体思路:
+#   游戏中的段位图标是 RGBA 源素材叠加在复杂背景上的。如果直接用源素材
+#   做模板匹配，背景差异会导致匹配分数极低。因此我们:
+#     1. 从截图中采样实际背景色
+#     2. 把源素材的 RGBA 合成到该背景色上 → 生成"模拟模板"
+#     3. 用模拟模板做 NCC（归一化相关系数）匹配
+#   这样模板的背景和截图背景一致，匹配分数大幅提高。
+#
+# 位置缓存:
+#   首次检测需要缩略图粗搜 → 原图精搜的完整流程（较慢）。
+#   一旦确定位置，就把 (分辨率, 侧, x, y, 尺寸) 存入 rank_positions.toml。
+#   后续检测直接在该位置附近精搜（极快）。
+#
+# 等级数字识别:
+#   段位图标下方有 I~V 的罗马数字（巅峰没有）。通过列投影峰值计数
+#   识别数字等级，II 和 IV 形状相似用峰宽区分。
 # =============================================================================
 
 _RANK_ICONS_DIR = get_project_root() / "resource" / "templates" / "rankicons"
 
-# 段位图标名 → 显示标签映射
+# 段位图标名 → 显示标签映射，在 _init_rank_icons() 中填充
 _RANK_LABELS: dict[str, str] = {}
 
-# 源素材缓存：{文件名: (BGR, Alpha)}，size = 290×290
+# 源素材缓存：{文件名: (BGR通道, Alpha通道)}
+# 源素材是 290×290 的 RGBA PNG，加载后拆分成颜色和透明度分别缓存
 _rank_icon_cache: dict[str, tuple[np.ndarray, np.ndarray]] = {}
 
-# 无数字等级的段位
+# 没有等级数字的段位（不触发 _detect_tier_number）
 _NO_TIER_RANKS = {"巅峰"}
 
-# 预合成模板缓存：{(图标名, 尺寸, bg_r, bg_g, bg_b): BGR模板}
+# 预合成模板缓存：{(图标名, 尺寸(px), 背景B, 背景G, 背景R): BGR模板}
+# 避免每次检测都重新合成模板（合成涉及 resize + alpha 混合，较慢）
 _composite_cache: dict[tuple, np.ndarray] = {}
-# 位置缓存：{(分辨率宽, 分辨率高, 侧): (x, y, size)}
+
+# 段位图标位置缓存：{(分辨率宽, 分辨率高, "player"/"opponent"): (x, y, 尺寸)}
 _position_cache: dict[tuple, tuple] = {}
 _POSITION_CACHE_FILE = get_project_root() / "resource" / "templates" / "rank_positions.toml"
 
 
 def _load_position_cache() -> None:
-    """从 rank_positions.toml 加载段位图标位置缓存。"""
+    """从 rank_positions.toml 加载段位图标在屏幕上的位置缓存。
+
+    文件格式:
+        [player]
+        1920x1080 = [560, 420, 55]   # x, y, 图标尺寸(px)
+        2560x1440 = [750, 560, 73]
+        [opponent]
+        ...
+
+    缓存 key 为 (宽, 高, "player"/"opponent")，value 为 (x, y, size)。
+    如果有缓存，后续检测直接在 (x,y) 附近小范围精搜，跳过缩略图粗搜。
+    """
     global _position_cache
     if _position_cache:
-        return
+        return  # 已经加载过，避免重复读文件
     try:
         import tomllib
         with open(_POSITION_CACHE_FILE, "rb") as f:
@@ -406,19 +437,24 @@ def _load_position_cache() -> None:
             section = data.get(side, {})
             for res, vals in section.items():
                 if isinstance(vals, list) and len(vals) == 3:
-                    w, h = res.split("x")
+                    w, h = res.split("x")  # "1920x1080" → 1920, 1080
                     _position_cache[(int(w), int(h), side)] = (
                         int(vals[0]), int(vals[1]), int(vals[2]))
     except (FileNotFoundError, KeyError, ValueError):
-        pass
+        pass  # 文件不存在或格式损坏 → 首次检测，走粗搜流程
 
 
 def _save_position_cache() -> None:
-    """将位置缓存写成 TOML 格式持久化。"""
+    """将内存中的段位图标位置缓存持久化到 rank_positions.toml。
+
+    只在首次检测成功后调用一次，后续检测直接读取缓存文件。
+    按 side 分组，每组按分辨率排序，方便人工查看和调试。
+    """
     lines = ["# 段位图标位置缓存（自动生成，首次检测后写入）",
              "# 格式: {分辨率} = [x, y, 尺寸]", ""]
     for side in ("player", "opponent"):
         lines.append(f"[{side}]")
+        # 按分辨率排序，方便人工查看
         for (w, h, s), (x, y, sz) in sorted(_position_cache.items()):
             if s == side:
                 lines.append(f"{w}x{h} = [{x}, {y}, {sz}]")
@@ -427,15 +463,29 @@ def _save_position_cache() -> None:
         _POSITION_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
         _POSITION_CACHE_FILE.write_text("\n".join(lines), encoding="utf-8")
     except OSError:
-        pass
+        pass  # 写文件失败不影响程序运行（下次启动重新检测即可）
 
 
 def _init_rank_icons() -> None:
-    """预加载全部段位图标源素材（RGBA）到内存缓存。"""
+    """预加载全部段位图标源素材（RGBA PNG）到内存缓存。
+
+    段位图标存储在 resource/templates/rankicons/ 下：
+        img_rankicon_01_l.png → 新手
+        img_rankicon_02_l.png → 青铜
+        ...
+        img_rateicon_01_l.png → 巅峰
+
+    每张图是 290×290 的 RGBA PNG。加载后拆分成：
+        - BGR 通道（[:, :, :3]）：颜色信息
+        - Alpha 通道（[:, :, 3]）：透明度遮罩
+
+    用 np.fromfile + cv2.imdecode 而非 cv2.imread，避免中文路径问题。
+    """
     global _RANK_LABELS, _rank_icon_cache
     if _rank_icon_cache:
-        return
+        return  # 已经加载过，避免重复加载
 
+    # 文件名 → 中文段位名
     _RANK_LABELS = {
         "img_rankicon_01": "新手", "img_rankicon_02": "青铜",
         "img_rankicon_03": "白银", "img_rankicon_04": "黄金",
@@ -446,26 +496,53 @@ def _init_rank_icons() -> None:
     for name in _RANK_LABELS:
         path = _RANK_ICONS_DIR / f"{name}_l.png"
         if path.exists():
+            # fromfile 读原始字节 → imdecode 解码（支持中文路径）
             raw = np.fromfile(str(path), dtype=np.uint8)
-            img = cv2.imdecode(raw, cv2.IMREAD_UNCHANGED)
-            if img is not None and img.shape[2] == 4:
+            img = cv2.imdecode(raw, cv2.IMREAD_UNCHANGED)  # 保留 RGBA
+            if img is not None and img.shape[2] == 4:  # 确保是 RGBA 图
                 _rank_icon_cache[name] = (img[:, :, :3], img[:, :, 3])
 
 
 def _sample_bg(screenshot: np.ndarray, x: int, y: int, w: int, h: int) -> np.ndarray:
-    """采样指定区域的平均背景色（BGR 三通道），用于 RGBA 合成。"""
+    """从截图的指定矩形区域采样平均背景色，用于 RGBA 源素材合成。
+
+    为什么需要采样背景色？
+        游戏段位图标是半透明叠加在背景上的。如果直接用源素材 PNG 做模板
+        匹配，PNG 的透明部分和截图的实际背景颜色不一致，NCC 匹配分数会
+        极低。正确做法：把源素材 RGBA 合成到与实际背景相同的颜色上，
+        生成的"模拟模板"和截图中的段位图标外观一致。
+
+    采样位置 (w//2-80, 10, 160, 30) 是顶栏空白区域，通常没有 UI 元素。
+
+    Returns:
+        shape=(3,) 的 float32 数组，BGR 三通道平均值。失败时返回灰色。
+    """
     region = screenshot[max(0, y):y + h, max(0, x):x + w]
     if region.size == 0:
-        return np.array([128, 128, 128], dtype=np.float32)
+        return np.array([128, 128, 128], dtype=np.float32)  # 灰色兜底
+    # 把所有像素 reshape 成 (N, 3)，沿列求均值 → BGR 三通道平均值
     return region.reshape(-1, 3).mean(axis=0).astype(np.float32)
 
 
 def _composite_rank_icon(name: str, size: int, bg_color: np.ndarray) -> np.ndarray | None:
-    """将源素材 RGBA 缩放到指定尺寸并合成到背景色上，返回 BGR 模板。
+    """将 RGBA 源素材缩放到目标尺寸，然后 Alpha 混合到背景色上，返回 BGR 模板。
 
-    结果自动缓存（同图标+同尺寸+同背景色复用）。
+    这是段位检测的核心合成步骤。分三步：
+        1. 缩放 — 把 290×290 的源素材缩放到目标尺寸
+        2. Alpha 混合 — 把 RGBA 叠加到背景色上
+           结果像素 = 前景RGB × alpha + 背景RGB × (1 - alpha)
+        3. 缓存 — 同一尺寸+同一背景色的模板下次直接用
+
+    Args:
+        name: 图标名，如 "img_rankicon_04"（黄金）
+        size: 目标尺寸（px），图标缩放到 size×size
+        bg_color: 背景色 BGR 三通道，shape=(3,)，float32
+
+    Returns:
+        size×size 的 BGR 模板，uint8。源素材不存在时返回 None。
     """
     global _composite_cache
+    # 缓存 key：图标名 + 尺寸 + 背景色（取整后 BGR 元组）
     bg_key = (int(bg_color[0]), int(bg_color[1]), int(bg_color[2]))
     cache_key = (name, size, bg_key)
     if cache_key in _composite_cache:
@@ -474,13 +551,19 @@ def _composite_rank_icon(name: str, size: int, bg_color: np.ndarray) -> np.ndarr
     entry = _rank_icon_cache.get(name)
     if entry is None:
         return None
-    bgr, alpha = entry
+    bgr, alpha = entry  # 解包 BGR 通道和 Alpha 通道
+
+    # 1. 缩放到目标尺寸
     scaled_bgr = cv2.resize(bgr, (size, size))
     scaled_alpha = cv2.resize(alpha, (size, size))
+
+    # 2. Alpha 混合：result = foreground × alpha + background × (1 - alpha)
+    #    alpha 转为 0.0~1.0 的浮点数
     alpha_f = scaled_alpha.astype(np.float32) / 255.0
-    bg = np.full((size, size, 3), bg_color, dtype=np.float32)
+    bg = np.full((size, size, 3), bg_color, dtype=np.float32)  # 纯色背景
     composite = (scaled_bgr.astype(np.float32) * alpha_f[:, :, None]
                  + bg * (1 - alpha_f[:, :, None])).astype(np.uint8)
+
     _composite_cache[cache_key] = composite
     return composite
 
@@ -489,11 +572,33 @@ def _detect_rank_in_roi(
     screenshot: np.ndarray, roi_x: int, roi_y: int, roi_w: int, roi_h: int,
     bg_color: np.ndarray, threshold: float = 0.7,
 ) -> tuple[str | None, float, int, int, int]:
-    """在指定 ROI 内搜索最佳段位图标，返回 (图标名, 分数, x, y, 尺寸)。"""
-    _init_rank_icons()
+    """在截图的指定 ROI（感兴趣区域）内搜索最佳段位图标。
+
+    采用"粗搜 + 精搜"两阶段策略：
+        粗搜（第一遍）：步长 12px，快速扫描所有尺寸 × 所有图标类型
+        精搜（第二遍）：如果粗搜有高分候选，在最佳尺寸 ±10px 范围内
+                       以步长 2px 精细搜索
+
+    为什么要粗搜+精搜？
+        段位图标的实际尺寸取决于分辨率和 UI 缩放，不能预设一个值。
+        遍历所有可能尺寸（20~150px）如果用步长 2px 会非常慢（65 次 × 8 图标
+        × ROI 匹配 ≈ 520 次模板匹配，每次都要 NCC 卷积）。
+        先用大步长 12px 快速定位大概尺寸，再用小步长 2px 精调，速度快 6 倍。
+
+    Args:
+        screenshot: 完整截图（BGR）
+        roi_x, roi_y, roi_w, roi_h: ROI 区域
+        bg_color: 采样背景色
+        threshold: 匹配置信度阈值
+
+    Returns:
+        (图标名 | None, 最高分数, best_x, best_y, best_尺寸)
+    """
+    _init_rank_icons()  # 确保图标已加载
 
     roi = screenshot[roi_y:roi_y + roi_h, roi_x:roi_x + roi_w]
 
+    # 尺寸搜索范围：最小 20px 或 屏幕宽/25，最大 屏幕宽/5
     img_w = screenshot.shape[1]
     min_sz = max(20, img_w // 25)
     max_sz = min(img_w // 5, roi_h, roi_w // 2)
@@ -502,11 +607,13 @@ def _detect_rank_in_roi(
     best_x, best_y, best_sz = 0, 0, 0
 
     for name in _RANK_LABELS:
-        # 先粗搜（步长 12），再精搜（缩小候选范围 ±8，步长 2）
+        # ---- 第一遍：粗搜（步长 12px） ----
         for sz in range(min_sz, max_sz, 12):
             tmpl = _composite_rank_icon(name, sz, bg_color)
+            # 模板比 ROI 大 → 跳过
             if tmpl is None or tmpl.shape[0] > roi.shape[0] or tmpl.shape[1] > roi.shape[1]:
                 continue
+            # TM_CCOEFF_NORMED：归一化互相关系数，对亮度变化不敏感
             result = cv2.matchTemplate(roi, tmpl, cv2.TM_CCOEFF_NORMED)
             _, val, _, loc = cv2.minMaxLoc(result)
             if val > best_score:
@@ -514,9 +621,12 @@ def _detect_rank_in_roi(
                 best_x, best_y = roi_x + loc[0], roi_y + loc[1]
                 best_sz = sz
 
-        # 如果找到高分候选，在临近尺寸精搜
+        # ---- 第二遍：精搜（步长 2px，范围 best_sz±10） ----
+        # 只有粗搜分数 > 0.5 才精搜（省计算）
         if best_name == name and best_score > 0.5:
-            for sz in range(max(min_sz, best_sz - 10), min(max_sz, best_sz + 12), 2):
+            fine_start = max(min_sz, best_sz - 10)
+            fine_end = min(max_sz, best_sz + 12)
+            for sz in range(fine_start, fine_end, 2):
                 tmpl = _composite_rank_icon(name, sz, bg_color)
                 if tmpl is None or tmpl.shape[0] > roi.shape[0] or tmpl.shape[1] > roi.shape[1]:
                     continue
@@ -528,38 +638,63 @@ def _detect_rank_in_roi(
                     best_sz = sz
 
     if best_score < threshold or best_name is None:
-        return None, best_score, 0, 0, 0
+        return None, best_score, 0, 0, 0  # 分数不够 → 视为未检测到
     return best_name, best_score, best_x, best_y, best_sz
 
 
 def _detect_tier_number(
     screenshot: np.ndarray, rank_x: int, rank_y: int, rank_w: int,
 ) -> tuple[int | None, float]:
-    """从段位图标下方裁出数字区域，用列投影峰值数识别 I~V。
+    """识别段位图标下方的罗马数字等级（I~V）。
 
-    I=1峰  II=2峰  III=3峰。IV/V 用投影形状区分。
+    段位图标右下角有一个小数字（I、II、III、IV、V），表示段位内的等级。
+    巅峰没有数字等级（_NO_TIER_RANKS 处理）。
+
+    算法：列投影峰值计数
+        1. 从段位图标的相对位置裁出数字区域
+           （位于图标右下角，约占图标 22%×11.5% 面积）
+        2. 转灰度 + OTSU 二值化（数字白、背景黑）
+        3. 反相后每列求和 → 得到"列投影"一维数组
+        4. 数列投影中的峰值个数 = 罗马数字的"竖线"数量
+           I = 1 个峰, III = 3 个峰
+
+        特殊情况 II vs IV：
+           两者都是 2 个峰（II=两竖、IV=一竖一V形），通过峰的宽度区分：
+           V 形笔画宽度明显大于 I 形 → 宽峰 > 窄峰 × 1.8 → IV
+
+    Args:
+        screenshot: 原始分辨率截图
+        rank_x, rank_y: 段位图标左上角坐标
+        rank_w: 段位图标尺寸（宽=高）
 
     Returns:
-        (数字 1-5 | None, 置信度 0-1)。None 表示无法确定。
+        (数字 1-5 | None, 置信度)。None 表示无法识别（如区域越界）。
     """
     h, w = screenshot.shape[:2]
-    tx = int(rank_x + 0.39 * rank_w)
-    ty = int(rank_y + 0.81 * rank_w)
-    tw = int(0.22 * rank_w)
-    th = int(0.115 * rank_w)
 
+    # 数字区域相对于段位图标的位置（经验值，基于多分辨率测试）
+    tx = int(rank_x + 0.39 * rank_w)  # 数字区域左上 x
+    ty = int(rank_y + 0.81 * rank_w)  # 数字区域左上 y
+    tw = int(0.22 * rank_w)           # 数字区域宽度
+    th = int(0.115 * rank_w)          # 数字区域高度
+
+    # 边界检查：数字区域不能超出截图
     if tx < 0 or ty < 0 or tx + tw > w or ty + th > h or tw <= 0 or th <= 0:
         return None, 0.0
 
+    # 转灰度
     gray = cv2.cvtColor(
         screenshot[ty:ty + th, tx:tx + tw], cv2.COLOR_BGR2GRAY
     )
 
-    # 二值化后算列投影
+    # OTSU 自动阈值二值化（数字=白 255，背景=黑 0）
     _, bin_img = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
-    proj = (255 - bin_img).sum(axis=0)  # 每列黑像素和
 
-    # 数峰值：超过最大值 40% 的连续隆起算一个峰
+    # 反相后列投影：每列的"黑像素"总数（数字笔画越密集，投影值越高）
+    proj = (255 - bin_img).sum(axis=0)
+
+    # ---- 数峰值 ----
+    # 峰值定义：投影值超过最大值的 35% 算一个隆起
     peak_th = proj.max() * 0.35
     in_peak = False
     n_peaks = 0
@@ -567,15 +702,15 @@ def _detect_tier_number(
         if v > peak_th and not in_peak:
             in_peak = True
             n_peaks += 1
-        elif v <= peak_th * 0.5:
+        elif v <= peak_th * 0.5:  # 跌到阈值 50% 以下才算"离开峰"
             in_peak = False
 
     if n_peaks <= 0:
         return None, 0.0
 
-    # 2 峰时需区分 II（两窄峰）和 IV（一窄 I + 一宽 V）
+    # ---- 2 峰特殊处理：区分 II（两窄峰）和 IV（一窄 I + 一宽 V） ----
     if n_peaks == 2:
-        # 找最宽峰——V 形峰比 I 宽得多
+        # 计算每个峰的宽度
         peak_widths = []
         in_peak = False
         w_start = 0
@@ -586,15 +721,16 @@ def _detect_tier_number(
             elif v <= peak_th * 0.5 and in_peak:
                 in_peak = False
                 peak_widths.append(i - w_start)
+        # V 形笔画比 I 宽 1.8 倍以上
         if len(peak_widths) >= 2 and max(peak_widths) > min(peak_widths) * 1.8:
-            return 4, 0.6  # 一宽一窄 → IV
-        return 2, 0.8      # 两窄峰 → II
+            return 4, 0.6  # IV
+        return 2, 0.8      # II
 
     if n_peaks == 1:
-        return 1, 0.8
+        return 1, 0.8   # I
     if n_peaks == 3:
-        return 3, 0.8
-
+        return 3, 0.8   # III
+    # n_peaks >= 4 可能在特别模糊时出现，保守返回 None
     return None, 0.0
 
 
@@ -602,66 +738,88 @@ def detect_rank_icon(
     screenshot: np.ndarray, threshold: float = 0.7,
     skip_sides: set | None = None,
 ) -> dict[str, str | int | float | None]:
-    """检测双方头像旁的段位图标和等级数字。
+    """检测双方头像旁边的段位图标和等级数字。
+
+    这是段位检测的主入口，由 RankDetector 线程每轮调用。
+
+    搜索策略（两阶段）:
+        ═══ 首次检测（无位置缓存）═══
+        1. 截图缩放到 600px 宽（加速粗搜）
+        2. 在缩略图上粗搜（_detect_rank_in_roi，粗+精两遍）
+        3. 把缩略图坐标映射回原图坐标
+        4. 在原图小范围内做一次精搜修正
+        5. 把 (分辨率, 侧, x, y, 尺寸) 存入位置缓存
+
+        ═══ 后续检测（有位置缓存）═══
+        1. 从缓存读取上次的位置和尺寸
+        2. 在缓存位置 ±25% 范围内直接精搜（步长 3px）
+        3. 比全图搜索快 10 倍以上
+
+    分左右半屏:
+        左侧 ⅓ 宽度 = 玩家（player）
+        右侧 ⅓ 宽度 = 对手（opponent）
 
     Args:
-        skip_sides: 跳过的侧，如 {"player"} 只搜对手。默认双方都搜。
-
-    应在 WAITING_TURN 阶段的截图上调用（UI 最稳定）。
-    分左右半屏搜索：左侧 = 玩家，右侧 = 对手。
+        screenshot: Master Duel 窗口截图（BGR 格式）
+        threshold: NCC 匹配置信度阈值 (0~1)，低于此值的结果丢弃
+        skip_sides: 要跳过的侧，如 {"player"} 只检测对手
 
     Returns:
-        {
-            "player_rank": "Platinum" | None,
-            "player_tier": 2 | None,
-            "player_score": 0.94,
-            "opponent_rank": "Diamond" | None,
-            "opponent_tier": 1 | None,
-            "opponent_score": 0.88,
-        }
+        包含 6 个字段的字典:
+            player_rank     — 己方段位，如 "铂金" / None
+            player_tier     — 己方等级数字 1-5 / None（巅峰无等级）
+            player_score    — 己方 NCC 匹配分数
+            opponent_rank   — 对方段位
+            opponent_tier   — 对方等级数字
+            opponent_score  — 对方 NCC 匹配分数
     """
     _init_rank_icons()
     _load_position_cache()
     h, w = screenshot.shape[:2]
 
-    # 采样背景色
+    # 从顶栏采样背景色（避免 UI 元素干扰）
     bg_color = _sample_bg(screenshot, w // 2 - 80, 10, 160, 30)
 
+    # 初始化结果字典（双方都从 None 开始）
     result: dict[str, str | int | float | None] = {
         "player_rank": None, "player_tier": None, "player_score": 0.0,
         "opponent_rank": None, "opponent_tier": None, "opponent_score": 0.0,
     }
 
-    # 缩略图快速搜索：缩到 600px 宽，坐标映射回去
+    # 缩略图粗搜：缩到 600px 宽，大幅减少匹配运算量
+    # 原图 1920×1080 的 ROI 约 640×360 → 缩略图 200×120，匹配快约 10 倍
     scale = 600.0 / w
     small = cv2.resize(screenshot, (600, int(h * scale)))
     small_h = small.shape[0]
     small_mid = small.shape[1] // 2
-    small_roi_w = small.shape[1] // 3
-    small_roi_h = small_h // 3
+    small_roi_w = small.shape[1] // 3   # 每侧占缩略图 ⅓ 宽度
+    small_roi_h = small_h // 3          # 上部 ⅓ 高度
 
     if skip_sides is None:
         skip_sides = set()
 
+    # 分别检测玩家（左侧）和对手（右侧）
     for side, sx in [("player", 0), ("opponent", small.shape[1] - small_roi_w)]:
         if side in skip_sides:
-            continue
-        # 检查位置缓存
+            continue  # 已检测到 → 跳过
+
         pos_key = (w, h, side)
         cached = _position_cache.get(pos_key)
 
         if cached:
-            # 有缓存：在已知位置附近直接精搜
+            # ===== 有位置缓存：在已知位置附近精搜 =====
             cx, cy, csz = cached
+            # 搜索范围：以缓存位置为中心，向四周扩展 25%
             px = max(0, cx - csz // 4)
             py = max(0, cy - csz // 4)
-            pw = min(csz * 2, w - px)
+            pw = min(csz * 2, w - px)   # 最多 2 倍缓存尺寸
             ph = min(csz * 2, h - py)
             search_roi = screenshot[py:py + ph, px:px + pw]
 
             best_name, best_score = None, 0.0
             best_x = best_y = best_sz = 0
             for name in _RANK_LABELS:
+                # 尺寸范围：缓存尺寸 ±15px，步长 3px
                 for sz in range(max(30, csz - 15), min(csz + 18, pw, ph), 3):
                     tmpl = _composite_rank_icon(name, sz, bg_color)
                     if tmpl is None or tmpl.shape[0] >= search_roi.shape[0] or tmpl.shape[1] >= search_roi.shape[1]:
@@ -673,21 +831,23 @@ def detect_rank_icon(
                         best_x, best_y = px + loc[0], py + loc[1]
                         best_sz = sz
             if best_score < threshold or best_name is None:
-                continue
+                continue  # 缓存失效（分辨率变了？），这一侧跳过
             name, score, rx, ry, rsz = best_name, best_score, best_x, best_y, best_sz
         else:
-            # 首次：缩略图搜索 + 映射 + 单模板修正
+            # ===== 首次检测：缩略图粗搜 → 映射 → 原图精搜修正 =====
             name, score, fx, fy, fsz = _detect_rank_in_roi(
                 small, sx, 0, small_roi_w, small_roi_h,
                 bg_color, threshold,
             )
             if name is None:
-                continue
+                continue  # 这一侧没检测到
 
+            # 把缩略图中的坐标映射回原图坐标
             rx = int(fx / scale)
             ry = int(fy / scale)
             rsz = int(fsz / scale)
 
+            # 在原图映射位置附近做一次精搜修正（消除缩放误差）
             search_x = max(0, rx - rsz // 4)
             search_y = max(0, ry - rsz // 4)
             search_w = min(rsz * 2, w - search_x)
@@ -701,13 +861,15 @@ def detect_rank_icon(
                 rx = search_x + loc[0]
                 ry = search_y + loc[1]
 
-            # 记住位置并持久化
+            # 记住位置并持久化——下次就不用缩略图粗搜了
             _position_cache[pos_key] = (rx, ry, rsz)
             _save_position_cache()
 
+        # 写入结果
         rank_label = _RANK_LABELS.get(name, name)
         result[f"{side}_rank"] = rank_label
         result[f"{side}_score"] = score
+        # 巅峰不检测等级数字（_NO_TIER_RANKS）
         if rank_label not in _NO_TIER_RANKS:
             tier, _ = _detect_tier_number(screenshot, rx, ry, rsz)
             result[f"{side}_tier"] = tier

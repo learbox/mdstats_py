@@ -514,8 +514,9 @@ class ConfigDialog(QDialog):
         lo.addWidget(g_hk)
 
         # ---- 段位图标检测 ----
+        # 独立于主管线运行的段位图标识别功能设置
         sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setFrameShape(QFrame.Shape.HLine)  # 水平分割线
         lo.addWidget(sep)
 
         lo.addWidget(QLabel("段位图标检测（独立线程）"))
@@ -527,21 +528,25 @@ class ConfigDialog(QDialog):
         self._rank_enabled_cb.toggled.connect(self._on_rank_enabled_toggled)
         lo.addWidget(self._rank_enabled_cb)
 
+        # 截图间隔：段位图标只在硬币阶段短暂显示（~2秒），需要较快的检测频率
         rk_row1 = QHBoxLayout()
         rk_row1.addWidget(QLabel("截图间隔:"))
         self._rank_interval = QDoubleSpinBox()
-        self._rank_interval.setRange(0.2, 2.0)
+        self._rank_interval.setRange(0.2, 2.0)      # 最快 0.2s，最慢 2s
         self._rank_interval.setSingleStep(0.1)
         self._rank_interval.setSuffix(" 秒")
+        self._rank_interval.setToolTip("段位图标仅在硬币阶段显示约 2 秒，间隔越短越不容易错过。")
         rk_row1.addWidget(self._rank_interval)
         rk_row1.addStretch()
         lo.addLayout(rk_row1)
 
+        # NCC 匹配置信度阈值：越高误检越少，但可能漏掉模糊的图标
         rk_row2 = QHBoxLayout()
         rk_row2.addWidget(QLabel("置信度阈值:"))
         self._rank_threshold = QDoubleSpinBox()
-        self._rank_threshold.setRange(0.5, 0.95)
+        self._rank_threshold.setRange(0.5, 0.95)     # 太低误检多，太高漏检多
         self._rank_threshold.setSingleStep(0.05)
+        self._rank_threshold.setToolTip("模板匹配置信度阈值。推荐 0.7。太高可能漏检，太低可能误检。")
         rk_row2.addWidget(self._rank_threshold)
         rk_row2.addStretch()
         lo.addLayout(rk_row2)
