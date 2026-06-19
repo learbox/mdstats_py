@@ -561,9 +561,10 @@ def _composite_rank_icon(name: str, size: int, bg_color: np.ndarray) -> np.ndarr
     # 2. Alpha 混合：result = foreground × alpha + background × (1 - alpha)
     #    alpha 转为 0.0~1.0 的浮点数
     alpha_f = scaled_alpha.astype(np.float32) / 255.0
+    fg = scaled_bgr.astype(np.float32)  # type: ignore[union-attr]
     bg = np.full((size, size, 3), bg_color, dtype=np.float32)  # 纯色背景
-    composite = (scaled_bgr.astype(np.float32) * alpha_f[:, :, None]
-                 + bg * (1 - alpha_f[:, :, None])).astype(np.uint8)
+    composite = (fg * alpha_f[:, :, None]
+                 + bg * (1 - alpha_f[:, :, None])).astype(np.uint8)  # type: ignore[union-attr]
 
     _composite_cache[cache_key] = composite
     return composite
@@ -607,36 +608,28 @@ def _detect_rank_in_roi(
     best_name, best_score = None, 0.0
     best_x, best_y, best_sz = 0, 0, 0
 
-    for name in _RANK_LABELS:
-        # ---- 第一遍：粗搜（步长 12px） ----
-        for sz in range(min_sz, max_sz, 12):
-            tmpl = _composite_rank_icon(name, sz, bg_color)
-            # 模板比 ROI 大 → 跳过
+    def _match_sizes(icon: str, sz_range: range, off_x: int, off_y: int) -> None:
+        """对指定尺寸范围做模板匹配，更新外层 best_* 变量。"""
+        nonlocal best_name, best_score, best_x, best_y, best_sz
+        for sz in sz_range:
+            tmpl = _composite_rank_icon(icon, sz, bg_color)
             if tmpl is None or tmpl.shape[0] > roi.shape[0] or tmpl.shape[1] > roi.shape[1]:
                 continue
-            # TM_CCOEFF_NORMED：归一化互相关系数，对亮度变化不敏感
             result = cv2.matchTemplate(roi, tmpl, cv2.TM_CCOEFF_NORMED)
             _, val, _, loc = cv2.minMaxLoc(result)
             if val > best_score:
-                best_score, best_name = val, name
-                best_x, best_y = roi_x + loc[0], roi_y + loc[1]
+                best_score, best_name = val, icon
+                best_x, best_y = off_x + loc[0], off_y + loc[1]
                 best_sz = sz
 
-        # ---- 第二遍：精搜（步长 2px，范围 best_sz±10） ----
-        # 只有粗搜分数 > 0.5 才精搜（省计算）
+    for name in _RANK_LABELS:
+        # 粗搜：步长 12px，快速扫描
+        _match_sizes(name, range(min_sz, max_sz, 12), roi_x, roi_y)
+        # 精搜：如果粗搜有高分候选，在最佳尺寸 ±10px 范围以步长 2px 精调
         if best_name == name and best_score > 0.5:
             fine_start = max(min_sz, best_sz - 10)
             fine_end = min(max_sz, best_sz + 12)
-            for sz in range(fine_start, fine_end, 2):
-                tmpl = _composite_rank_icon(name, sz, bg_color)
-                if tmpl is None or tmpl.shape[0] > roi.shape[0] or tmpl.shape[1] > roi.shape[1]:
-                    continue
-                result = cv2.matchTemplate(roi, tmpl, cv2.TM_CCOEFF_NORMED)
-                _, val, _, loc = cv2.minMaxLoc(result)
-                if val > best_score:
-                    best_score, best_name = val, name
-                    best_x, best_y = roi_x + loc[0], roi_y + loc[1]
-                    best_sz = sz
+            _match_sizes(name, range(fine_start, fine_end, 2), roi_x, roi_y)
 
     if best_score < threshold or best_name is None:
         return None, best_score, 0, 0, 0  # 分数不够 → 视为未检测到
@@ -714,21 +707,21 @@ def _detect_tier_number(
         return None, 0.0
 
     # ---- 峰宽计算（所有分支共用） ----
-    def _measure_peaks(proj: np.ndarray, peak_th: float) -> list[int]:
+    def _measure_peaks(pj: np.ndarray, pth: float) -> list[int]:
         """量出投影中每个峰的宽度（列数），返回宽度列表。"""
-        widths = []
-        in_peak = False
+        pw = []
+        inside = False
         w_start = 0
-        for i, v in enumerate(proj):
-            if v > peak_th and not in_peak:
-                in_peak = True
+        for i, val in enumerate(pj):
+            if val > pth and not inside:
+                inside = True
                 w_start = i
-            elif v <= peak_th * 0.5 and in_peak:
-                in_peak = False
-                widths.append(i - w_start)
-        if in_peak:  # 峰在数组末尾没闭合
-            widths.append(len(proj) - w_start)
-        return widths
+            elif val <= pth * 0.5 and inside:
+                inside = False
+                pw.append(i - w_start)
+        if inside:  # 峰在数组末尾没闭合
+            pw.append(len(pj) - w_start)
+        return pw
 
     total_w = len(proj)  # 字符区总宽度（列数）
 
@@ -859,7 +852,6 @@ def detect_rank_icon(
     scale = 600.0 / w
     small = cv2.resize(screenshot, (600, int(h * scale)))
     small_h = small.shape[0]
-    small_mid = small.shape[1] // 2
     small_roi_w = small.shape[1] // 3   # 每侧占缩略图 ⅓ 宽度
     small_roi_h = small_h // 3          # 上部 ⅓ 高度
 
@@ -867,9 +859,15 @@ def detect_rank_icon(
         skip_sides = set()
 
     # 分别检测玩家（左侧）和对手（右侧）
+    def _search_bbox(center_x: int, center_y: int, sz: int) -> tuple[int, int, int, int]:
+        """以 (center_x,center_y) 为中心 sz 为尺寸，计算搜索范围，裁剪到画面内。"""
+        x = max(0, center_x - sz // 4)
+        y = max(0, center_y - sz // 4)
+        return x, y, min(sz * 2, w - x), min(sz * 2, h - y)
+
     for side, sx in [("player", 0), ("opponent", small.shape[1] - small_roi_w)]:
         if side in skip_sides:
-            continue  # 已检测到 → 跳过
+            continue
 
         pos_key = (w, h, side)
         cached = _position_cache.get(pos_key)
@@ -877,17 +875,12 @@ def detect_rank_icon(
         if cached:
             # ===== 有位置缓存：在已知位置附近精搜 =====
             cx, cy, csz = cached
-            # 搜索范围：以缓存位置为中心，向四周扩展 25%
-            px = max(0, cx - csz // 4)
-            py = max(0, cy - csz // 4)
-            pw = min(csz * 2, w - px)   # 最多 2 倍缓存尺寸
-            ph = min(csz * 2, h - py)
+            px, py, pw, ph = _search_bbox(cx, cy, csz)
             search_roi = screenshot[py:py + ph, px:px + pw]
 
             best_name, best_score = None, 0.0
             best_x = best_y = best_sz = 0
             for name in _RANK_LABELS:
-                # 尺寸范围：缓存尺寸 ±15px，步长 3px
                 for sz in range(max(30, csz - 15), min(csz + 18, pw, ph), 3):
                     tmpl = _composite_rank_icon(name, sz, bg_color)
                     if tmpl is None or tmpl.shape[0] >= search_roi.shape[0] or tmpl.shape[1] >= search_roi.shape[1]:
@@ -899,7 +892,7 @@ def detect_rank_icon(
                         best_x, best_y = px + loc[0], py + loc[1]
                         best_sz = sz
             if best_score < threshold or best_name is None:
-                continue  # 缓存失效（分辨率变了？），这一侧跳过
+                continue
             name, score, rx, ry, rsz = best_name, best_score, best_x, best_y, best_sz
         else:
             # ===== 首次检测：缩略图粗搜 → 映射 → 原图精搜修正 =====
@@ -908,28 +901,21 @@ def detect_rank_icon(
                 bg_color, threshold,
             )
             if name is None:
-                continue  # 这一侧没检测到
+                continue
 
-            # 把缩略图中的坐标映射回原图坐标
             rx = int(fx / scale)
             ry = int(fy / scale)
             rsz = int(fsz / scale)
 
-            # 在原图映射位置附近做一次精搜修正（消除缩放误差）
-            search_x = max(0, rx - rsz // 4)
-            search_y = max(0, ry - rsz // 4)
-            search_w = min(rsz * 2, w - search_x)
-            search_h = min(rsz * 2, h - search_y)
-            search_roi = screenshot[search_y:search_y + search_h,
-                                    search_x:search_x + search_w]
+            sx2, sy2, sw, sh = _search_bbox(rx, ry, rsz)
+            search_roi = screenshot[sy2:sy2 + sh, sx2:sx2 + sw]
             tmpl = _composite_rank_icon(name, rsz, bg_color)
             if tmpl is not None:
                 res = cv2.matchTemplate(search_roi, tmpl, cv2.TM_CCOEFF_NORMED)
                 _, _, _, loc = cv2.minMaxLoc(res)
-                rx = search_x + loc[0]
-                ry = search_y + loc[1]
+                rx = sx2 + loc[0]
+                ry = sy2 + loc[1]
 
-            # 记住位置并持久化——下次就不用缩略图粗搜了
             _position_cache[pos_key] = (rx, ry, rsz)
             _save_position_cache()
 
