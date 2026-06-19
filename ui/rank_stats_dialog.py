@@ -2,6 +2,8 @@
 
 样式参考 ConfigDialog：自定义标题栏 + 半透明背景 + 无边框窗口。"""
 
+import ctypes
+
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
@@ -60,6 +62,7 @@ class RankStatsDialog(QDialog):
             db = mb + shift if mb <= 128 else mb - shift
             dialog_bg = f"#{dr:02x}{dg:02x}{db:02x}"
         self.setStyleSheet(f"#rankStatsDialog {{ background: {dialog_bg}; }}")
+        self._apply_dwm_round_corners()
 
         # 主布局：标题栏 + 半透明内容区
         outer = QVBoxLayout(self)
@@ -206,6 +209,20 @@ class RankStatsDialog(QDialog):
             idx = self._deck_combo.findText(last_deck)
             if idx >= 0:
                 self._deck_combo.setCurrentIndex(idx)
+
+    def _apply_dwm_round_corners(self) -> None:
+        """启用 Windows DWM 窗口圆角（与 ConfigDialog 一致）。"""
+        try:
+            hwnd = int(self.winId())
+            dwmwa = 33  # DWMWA_WINDOW_CORNER_PREFERENCE
+            dwmwcp_round = 2
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(  # type: ignore[attr-defined]
+                hwnd, dwmwa,
+                ctypes.byref(ctypes.c_int(dwmwcp_round)),
+                ctypes.sizeof(ctypes.c_int),
+            )
+        except Exception:
+            pass
 
     def _refresh(self) -> None:
         """根据筛选条件刷新统计显示。"""
