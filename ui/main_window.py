@@ -2221,12 +2221,13 @@ class MainWindow(QMainWindow):
             self._info_timer.stop()
         if self._wait_timer is not None:
             self._wait_timer.stop()
-        if self._worker is not None:
-            self._worker.stop()         # 优雅停止：让最后一轮检测跑完并 emit 结果
-            self._worker.wait(1000)     # 等最多 1 秒处理完 pending 写入
-            if self._worker.isRunning():
-                self._worker.terminate()  # 超时兜底
-                self._worker.wait()
+        worker = self._worker
+        if worker is not None:
+            worker.stop()               # 优雅停止：让最后一轮检测跑完并 emit 结果
+            worker.wait(1000)           # 等最多 1 秒处理完 pending 写入
+            if worker.isRunning():
+                worker.terminate()       # 超时兜底
+                worker.wait()
         if self._rank_detector is not None:
             self._rank_detector.terminate()  # 段位线程不影响 CSV，直接杀
             self._rank_detector.wait()
