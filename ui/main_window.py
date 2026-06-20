@@ -1077,6 +1077,7 @@ class MainWindow(QMainWindow):
         if self._config.get("rank_detection", {}).get("enabled", True):
             self._rank_detector = RankDetector()
             self._rank_detector.rank_icon_detected.connect(self._on_rank_icon_detected)
+            self._rank_detector.partial_update.connect(self._on_rank_partial)
             self._rank_detector.start()  # QThread.start() → 后台独立线程执行 run()
         self._snapshot_ctrl.sync_hotkeys()
 
@@ -1166,6 +1167,8 @@ class MainWindow(QMainWindow):
         show_conf = self._config.get("debug", {}).get("show_confidence", False)
         def _fmt(key: str) -> str:
             rank = rank_info.get(f"{key}_rank") or "?"
+            if rank == "?":
+                return "?"                     # 未检测到，不显示假置信度 0.00
             icon_score = rank_info.get(f"{key}_score", 0)
             tier = rank_info.get(f"{key}_tier")
             tier_score = rank_info.get(f"{key}_tier_score", 0)
@@ -1183,6 +1186,37 @@ class MainWindow(QMainWindow):
         player = _fmt("player")
         opponent = _fmt("opponent")
         self._show_status(f"段位: {player} vs {opponent}")
+
+    def _on_rank_partial(self, rank_info: dict) -> None:
+        """增量进度回调：主循环首次检测到单方段位时更新状态栏。
+
+        与 _on_rank_icon_detected 不同：
+        - 此槽仅更新状态栏显示，不存储结果（_rank_icon_result 不变）
+        - 等双方齐备后 rank_icon_detected 发射时才正式存储
+        """
+        show_conf = self._config.get("debug", {}).get("show_confidence", False)
+
+        def _partial_fmt(key: str) -> str:
+            rank = rank_info.get(f"{key}_rank")
+            if not rank:
+                return "?"
+            icon_score = rank_info.get(f"{key}_score", 0)
+            tier = rank_info.get(f"{key}_tier")
+            tier_score = rank_info.get(f"{key}_tier_score", 0)
+            if show_conf:
+                rank_part = f"{rank} ({icon_score:.2f})"
+            else:
+                rank_part = rank
+            if isinstance(tier, int) and 1 <= tier <= 5:
+                tier_str = ["", "I", "II", "III", "IV", "V"][tier]
+                if show_conf:
+                    return f"{rank_part} {tier_str} ({tier_score:.2f})"
+                return f"{rank} {tier_str}"
+            return rank_part
+
+        player = _partial_fmt("player")
+        opponent = _partial_fmt("opponent")
+        self._show_status(f"🔍 检测中: {player} vs {opponent}")
 
     def _rank_icon_strs(self) -> tuple[str, str]:
         """取出缓存的段位图标结果，返回 (己方段位字符串, 对方段位字符串)。
