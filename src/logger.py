@@ -132,5 +132,8 @@ def write(tag: str, msg: str) -> None:
 
     # 加锁写文件 — 保证多线程并发写入时不会交错
     with _lock:
-        with open(_log_path, "a", encoding="utf-8") as f:
-            f.write(line)
+        try:
+            with open(_log_path, "a", encoding="utf-8") as f:
+                f.write(line)
+        except OSError:
+            pass  # 文件被其他程序独占打开（如 WPS），静默跳过不崩溃
