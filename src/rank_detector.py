@@ -57,7 +57,8 @@ class RankDetector(QThread):
 
     # Signal 定义：类属性，不是实例属性
     # Qt 会在后台建立线程安全的通信通道
-    rank_icon_detected = Signal(dict)  # 携带的 dict 格式: {player_rank, player_tier, ...}
+    rank_icon_detected = Signal(dict)  # 双方都检测到时发射（完整结果）
+    partial_update = Signal(dict)      # 首次检测到单方时发射（增量进度）
 
     def __init__(self, parent=None):
         """初始化段位检测线程，从 config.toml 读取配置。
@@ -189,22 +190,30 @@ class RankDetector(QThread):
                 result = {}  # 检测异常时返回空结果，下一轮重试
 
             # ---- 合并多次检测结果 ----
-            # 可能同一局内多次截图才分别检测到 player 和 opponent
+            # 记录合并前的状态，用于判断是否有新发现
+            had_player = bool(self._result.get("player_rank")) if self._result else False
+            had_opponent = bool(self._result.get("opponent_rank")) if self._result else False
+
             if self._result:
                 for k in ("player_rank", "player_tier", "player_score",
                           "opponent_rank", "opponent_tier", "opponent_score"):
-                    # 只填充还没检测到的字段（不覆盖已有结果）
                     if not self._result.get(k) and result.get(k):
                         self._result[k] = result[k]
             else:
-                self._result = result  # 第一次检测，直接保存
+                self._result = result
 
-            # ---- 双方都检测到 → 发射信号并暂停 ----
-            if (self._result is not None
-                    and self._result.get("player_rank")
-                    and self._result.get("opponent_rank")):
-                self.rank_icon_detected.emit(dict(self._result))
-                self._paused = True  # 暂停截图，等待主窗口通知下一局
+            # ---- 发射信号（仅在新发现时） ----
+            has_player = bool(self._result.get("player_rank")) if self._result else False
+            has_opponent = bool(self._result.get("opponent_rank")) if self._result else False
+
+            if (has_player and not had_player) or (has_opponent and not had_opponent):
+                if has_player and has_opponent:
+                    # 双方齐备 → 完整结果
+                    self.rank_icon_detected.emit(dict(self._result))
+                    self._paused = True
+                else:
+                    # 首次检测到单方 → 增量进度（状态栏实时反馈）
+                    self.partial_update.emit(dict(self._result))
 
             # 等待指定间隔后进入下一轮截图
             self.msleep(int(self._interval * 1000))
