@@ -169,7 +169,7 @@ python main.py
 ## 项目结构
 
 ```
-mdstats_py/
+MD_Stats/
 ├── main.py                  # 程序入口
 ├── config.toml              # 配置文件
 ├── pyproject.toml           # 项目元数据与依赖 (uv)

@@ -1,5 +1,5 @@
 [project]
-name = "mdstats-py"
+name = "mdstats"
 version = "1.8.2"
 requires-python = ">=3.11"
 dependencies = [
