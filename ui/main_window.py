@@ -1185,7 +1185,7 @@ class MainWindow(QMainWindow):
 
         player = _fmt("player")
         opponent = _fmt("opponent")
-        self._show_status(f"段位: {player} vs {opponent}")
+        self._on_status(f"段位: {player} vs {opponent}")
 
     def _on_rank_partial(self, rank_info: dict) -> None:
         """增量进度回调：主循环首次检测到单方段位时更新状态栏。
@@ -1216,7 +1216,7 @@ class MainWindow(QMainWindow):
 
         player = _partial_fmt("player")
         opponent = _partial_fmt("opponent")
-        self._show_status(f"🔍 检测中: {player} vs {opponent}")
+        self._on_status(f"🔍 检测中: {player} vs {opponent}")
 
     def _rank_icon_strs(self) -> tuple[str, str]:
         """取出缓存的段位图标结果，返回 (己方段位字符串, 对方段位字符串)。
