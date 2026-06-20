@@ -81,7 +81,7 @@ jobs:
               a.scripts,
               [],
               exclude_binaries=True,
-              name='MDStats',
+              name='MD Stats',
               debug=False,
               bootloader_ignore_signals=False,
               strip=False,
@@ -102,12 +102,12 @@ jobs:
               strip=False,
               upx=False,
               upx_exclude=[],
-              name='MDStats',
+              name='MD Stats',
           )
 
-          '@ | Set-Content MDStats.spec -Encoding UTF8
+          '@ | Set-Content MD Stats.spec -Encoding UTF8
 
-          uv run --with 'pyinstaller>=6.10,<7' pyinstaller MDStats.spec --noconfirm
+          uv run --with 'pyinstaller>=6.10,<7' pyinstaller MD Stats.spec --noconfirm
 
       - name: 组装发布目录
         shell: pwsh
@@ -117,8 +117,8 @@ jobs:
           $tag = $env:TAG
           $release = "dist/release"
           New-Item -ItemType Directory -Path $release -Force | Out-Null
-          Copy-Item "dist/MDStats/MDStats.exe" $release
-          Copy-Item -Recurse "dist/MDStats/.runtime" $release
+          Copy-Item "dist/MD Stats/MD Stats.exe" $release
+          Copy-Item -Recurse "dist/MD Stats/.runtime" $release
           Copy-Item -Recurse themes $release
           Copy-Item -Recurse csv $release
           Copy-Item -Recurse resource $release
@@ -129,19 +129,19 @@ jobs:
           Copy-Item LICENSE $release
           Get-ChildItem -Path $release -Recurse -Include __pycache__ -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
           Get-ChildItem -Path $release -Recurse -Filter *.pyc -Force | Remove-Item -Force -ErrorAction SilentlyContinue
-          Compress-Archive -Path "$release/*" -DestinationPath "dist/MDStats-$tag.zip" -CompressionLevel Optimal
+          Compress-Archive -Path "$release/*" -DestinationPath "dist/MD Stats-$tag.zip" -CompressionLevel Optimal
 
       - name: 上传 ZIP 为构建产物（非 tag 时在此下载）
         if: "!startsWith(github.ref, 'refs/tags/')"
         uses: actions/upload-artifact@v4
         with:
-          name: MDStats-${{ github.ref_name }}
-          path: dist/MDStats-${{ github.ref_name }}.zip
+          name: MD Stats-${{ github.ref_name }}
+          path: dist/MD Stats-${{ github.ref_name }}.zip
 
       - name: 创建 GitHub Release（草稿，仅 tag 触发）
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/MDStats-${{ github.ref_name }}.zip
+          files: dist/MD Stats-${{ github.ref_name }}.zip
           name: MD Stats ${{ github.ref_name }}
           draft: true
