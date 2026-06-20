@@ -84,7 +84,7 @@ git log v上一版本..v新版本 --oneline
 
 ## 7. 创建 GitHub Release
 
-打开 `https://github.com/learbox/mdstats_py/releases/tag/vX.Y.Z`，粘贴 Release Notes，下载 CI 构建产物并上传为附件，点击发布。
+打开 `https://github.com/learbox/MD_Stats/releases/tag/vX.Y.Z`，粘贴 Release Notes，下载 CI 构建产物并上传为附件，点击发布。
 
 注意：不要勾选「Set as latest release」之外的标签（Pre-release 仅限测试版）。
 

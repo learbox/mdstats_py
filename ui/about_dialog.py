@@ -42,7 +42,7 @@ from src.config import get_project_root
 VERSION = "1.8.1"       # 当前版本号，发版前更新
 AUTHOR = "learbox"       # 作者名
 LICENSE = "MIT"          # 开源协议
-REPO_URL = "https://github.com/learbox/mdstats_py"  # 项目仓库，留空则不显示链接
+REPO_URL = "https://github.com/learbox/MD_Stats"  # 项目仓库，留空则不显示链接
 DESCRIPTION = "基于 Python + OpenCV + PySide6\nMaster Duel 对局自动统计工具"
 ACKNOWLEDGMENTS = (      # 特别鸣谢，支持 HTML <a> 标签
     '<a href="https://github.com/slimpigs">KleeKlee</a>'
@@ -219,7 +219,7 @@ class AboutDialog(QDialog):
         from urllib.error import URLError, HTTPError
         try:
 
-            url = "https://api.github.com/repos/learbox/mdstats_py/releases/latest"
+            url = "https://api.github.com/repos/learbox/MD_Stats/releases/latest"
             req = urllib.request.Request(url)
             req.add_header("Accept", "application/vnd.github+json")
             req.add_header("User-Agent", "MDStats")

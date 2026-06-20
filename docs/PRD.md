@@ -7,7 +7,7 @@
 **定位**: 基于图像识别的 Yu-Gi-Oh! Master Duel 对局自动统计工具  
 **平台**: Windows  
 **语言**: Python + PySide6 + OpenCV  
-**仓库**: https://github.com/learbox/mdstats_py
+**仓库**: https://github.com/learbox/MD_Stats
 
 ## 核心功能
 

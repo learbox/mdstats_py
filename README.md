@@ -50,8 +50,8 @@
 ### 使用 uv（推荐）
 
 ```bash
-git clone https://github.com/learbox/mdstats_py.git
-cd mdstats_py
+git clone https://github.com/learbox/MD_Stats.git
+cd MD_Stats
 uv sync
 ```
 

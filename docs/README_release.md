@@ -101,7 +101,7 @@ MDStats/
 
 ## 遇到问题？
 
-常见问题排查请参考 [TROUBLESHOOTING.md](https://github.com/learbox/mdstats_py/blob/main/docs/TROUBLESHOOTING.md)。识别不准时优先检查模板——在对应分辨率下重新截取通常可解决。
+常见问题排查请参考 [TROUBLESHOOTING.md](https://github.com/learbox/MD_Stats/blob/main/docs/TROUBLESHOOTING.md)。识别不准时优先检查模板——在对应分辨率下重新截取通常可解决。
 
 ## 免责声明
 
