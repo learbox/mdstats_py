@@ -628,44 +628,40 @@ def _sample_bg(screenshot: np.ndarray, x: int, y: int, w: int, h: int) -> np.nda
     return region.reshape(-1, 3).mean(axis=0).astype(np.float32)
 
 
-def _composite_rank_icon(name: str, size: int, bg_color: np.ndarray) -> np.ndarray | None:
-    """将 RGBA 源素材缩放到目标尺寸，然后 Alpha 混合到背景色上，返回 BGR 模板。
+def _composite_rank_icon(name: str, w: int, h: int, bg_color: np.ndarray) -> np.ndarray | None:
+    """将 RGBA 源素材按目标宽高合成到背景色上，返回 BGR 模板。
 
-    这是段位检测的核心合成步骤。分三步：
-        1. 缩放 — 把 290×290 的源素材缩放到目标尺寸
-        2. Alpha 混合 — 把 RGBA 叠加到背景色上
-           结果像素 = 前景RGB × alpha + 背景RGB × (1 - alpha)
-        3. 缓存 — 同一尺寸+同一背景色的模板下次直接用
+    源素材可以是任意尺寸的长方形，合成后的模板保持原始宽高比。
+    分三步：缩放 → Alpha 混合 → 缓存。
 
     Args:
         name: 图标名，如 "img_rankicon_04"（黄金）
-        size: 目标尺寸（px），图标缩放到 size×size
+        w: 目标宽度（px）
+        h: 目标高度（px）
         bg_color: 背景色 BGR 三通道，shape=(3,)，float32
 
     Returns:
-        size×size 的 BGR 模板，uint8。源素材不存在时返回 None。
+        w×h 的 BGR 模板，uint8。源素材不存在时返回 None。
     """
     global _composite_cache
-    # 缓存 key：图标名 + 尺寸 + 背景色（取整后 BGR 元组）
     bg_key = (int(bg_color[0]), int(bg_color[1]), int(bg_color[2]))
-    cache_key = (name, size, bg_key)
+    cache_key = (name, w, h, bg_key)
     if cache_key in _composite_cache:
         return _composite_cache[cache_key]
 
     entry = _rank_icon_cache.get(name)
     if entry is None:
         return None
-    bgr, alpha = entry  # 解包 BGR 通道和 Alpha 通道
+    bgr, alpha = entry
 
-    # 1. 缩放到目标尺寸
-    scaled_bgr = cv2.resize(bgr, (size, size))
-    scaled_alpha = cv2.resize(alpha, (size, size))
+    # 1. 缩放到目标尺寸（不假定正方形）
+    scaled_bgr = cv2.resize(bgr, (w, h))
+    scaled_alpha = cv2.resize(alpha, (w, h))
 
-    # 2. Alpha 混合：result = foreground × alpha + background × (1 - alpha)
-    #    alpha 转为 0.0~1.0 的浮点数
+    # 2. Alpha 混合
     alpha_f = scaled_alpha.astype(np.float32) / 255.0
-    fg: np.ndarray = np.asarray(scaled_bgr, dtype=np.float32)
-    bg: np.ndarray = np.full((size, size, 3), bg_color, dtype=np.float32)
+    fg = np.asarray(scaled_bgr, dtype=np.float32)
+    bg = np.full((h, w, 3), bg_color, dtype=np.float32)
     blended = fg * alpha_f[:, :, None] + bg * (1 - alpha_f[:, :, None])  # type: ignore[operator]
     composite = np.asarray(blended, dtype=np.uint8)
 
@@ -677,19 +673,26 @@ def _match_icon_at_sizes(
     roi: np.ndarray, icon: str, sz_range: range, bg_color: np.ndarray,
     offset_x: int, offset_y: int, *, strict_roi: bool = False,
 ) -> tuple[str, float, int, int, int, int]:
-    """在 ROI 上对指定图标和尺寸范围逐一模板匹配，返回最高分结果。
+    """在 ROI 上对指定图标按宽度范围逐一匹配，返回最高分结果。
 
-    源素材 290×290 等比缩放，合成后的模板 w = h = sz。
+    高度由源素材宽高比自动计算（当前源素材为正方形，ratio=1.0）。
     返回 (图标名, 分数, x, y, w, h)。
 
-    strict_roi=True 时模板必须严格小于ROI（用 >= 判断而非 >），
-    因为缓存搜索结果区域可能很紧凑。
+    strict_roi=True 时模板必须严格小于ROI（用 >= 判断而非 >）。
     """
+    # 从源素材获取宽高比
+    entry = _rank_icon_cache.get(icon)
+    if entry is None:
+        return "", 0.0, 0, 0, 0, 0
+    src_h, src_w = entry[0].shape[:2]
+    ratio = src_h / src_w
+
     best_name = ""
     best_score = 0.0
     best_x = best_y = best_w = 0
-    for sz in sz_range:
-        tmpl = _composite_rank_icon(icon, sz, bg_color)
+    for w in sz_range:
+        h = int(w * ratio)
+        tmpl = _composite_rank_icon(icon, w, h, bg_color)
         if tmpl is None:
             continue
         if strict_roi:
@@ -704,8 +707,9 @@ def _match_icon_at_sizes(
             best_score = val
             best_name = icon
             best_x, best_y = offset_x + loc[0], offset_y + loc[1]
-            best_w = sz
-    return best_name, best_score, best_x, best_y, best_w, best_w
+            best_w = w
+    best_h = int(best_w * ratio)
+    return best_name, best_score, best_x, best_y, best_w, best_h
 
 
 def _detect_rank_in_roi(
@@ -1051,7 +1055,7 @@ def detect_rank_icon(
 
             sx2, sy2, sw, sh = _search_bbox(rx, ry, rw, rh)
             search_roi = screenshot[sy2:sy2 + sh, sx2:sx2 + sw]
-            tmpl = _composite_rank_icon(name, rw, bg_color)
+            tmpl = _composite_rank_icon(name, rw, rh, bg_color)
             if tmpl is not None:
                 res = cv2.matchTemplate(search_roi, tmpl, cv2.TM_CCOEFF_NORMED)
                 _, _, _, loc = cv2.minMaxLoc(res)
