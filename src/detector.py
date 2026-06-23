@@ -345,7 +345,7 @@ def detect_result(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
 def _save_roi(section: str, x: int, y: int, w: int, h: int) -> None:
     """将检测到的位置写入 roi.toml 的指定 section，下次启动自动加载。
 
-    ROI 以匹配点为中心、模板尺寸 x3 为范围，留足余量防止下次偏移。
+    ROI 以匹配点为中心、模板尺寸 ×3 为范围，留足余量防止下次偏移。
     """
     if _resolution_subdir is None:
         return
@@ -354,12 +354,27 @@ def _save_roi(section: str, x: int, y: int, w: int, h: int) -> None:
         if path.exists():
             text = path.read_text(encoding="utf-8")
         else:
-            text = "# 模板匹配搜索区域（社区测量+自动学习）\n"
-        # 追加 [rank] 段（如已存在则不动）
+            text = (
+                "# ============================================================\n"
+                "# 模板匹配搜索区域 — 由 MD Stats 自动生成\n"
+                "#\n"
+                "# 首次检测成功后自动写入，后续启动加载以加速模板匹配。\n"
+                "# 坐标格式：[section] 下的 x, y, width, height（像素）。\n"
+                "# 手动删除此文件可重置为全图搜索。\n"
+                "# ============================================================\n"
+            )
+        # 追加 [section] 段（如已存在则不动）
         if f"[{section}]" not in text:
             text += (
                 f"\n[{section}]\n"
-                f"x = {x}\ny = {y}\nwidth = {w}\nheight = {h}\n"
+                f"# ROI 左上角 X 坐标（像素）\n"
+                f"x = {x}\n"
+                f"# ROI 左上角 Y 坐标（像素）\n"
+                f"y = {y}\n"
+                f"# ROI 宽度（像素）\n"
+                f"width = {w}\n"
+                f"# ROI 高度（像素）\n"
+                f"height = {h}\n"
             )
             path.write_text(text, encoding="utf-8")
         # 同步更新内存缓存
@@ -596,11 +611,23 @@ def _save_position_cache() -> None:
     只在首次检测成功后调用一次，后续检测直接读取缓存文件。
     按 side 分组，每组按分辨率排序，方便人工查看和调试。
     """
-    lines = ["# 段位图标位置缓存（自动生成，首次检测后写入）",
-             "# 格式: {分辨率} = [x, y, 尺寸]", ""]
+    lines = [
+        "# ============================================================",
+        "# 段位图标位置缓存 — 由 MD Stats 自动生成",
+        "#",
+        "# 首次检测到段位图标后自动写入，后续启动直接读取以加速检测。",
+        "# 格式: {分辨率} = [x, y, 尺寸]",
+        "#   x  — 图标左上角 X 坐标（像素）",
+        "#   y  — 图标左上角 Y 坐标（像素）",
+        "#   尺寸 — 图标尺寸（像素，宽=高）",
+        "# 手动删除此文件可强制重新全图搜索。",
+        "# ============================================================",
+        "",
+    ]
     for side in ("player", "opponent"):
+        label = "己方" if side == "player" else "对方"
+        lines.append(f"# ---- {label}段位图标 ----")
         lines.append(f"[{side}]")
-        # 按分辨率排序，方便人工查看
         for (w, h, s), (x, y, sz) in sorted(_position_cache.items()):
             if s == side:
                 lines.append(f"{w}x{h} = [{x}, {y}, {sz}]")
