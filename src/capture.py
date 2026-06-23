@@ -166,6 +166,26 @@ def get_client_size(title_substring: str = "masterduel") -> tuple[int, int] | No
     return right - left, bottom - top
 
 
+def get_window_rect(title_substring: str = "masterduel") -> str | None:
+    """获取窗口的屏幕外框坐标（含标题栏和边框）。
+
+    用于 TOML 元数据的 window_rect 字段，帮助排查多显示器 DPI 缩放问题。
+    返回格式: "left,top,right,bottom"
+
+    Args:
+        title_substring: 窗口标题关键词，默认 "masterduel"。
+
+    Returns:
+        "left,top,right,bottom" 字符串或 None（窗口未找到时）。
+    """
+    found = _find_window_by_title(title_substring)
+    if found is None:
+        return None
+    hwnd, _title = found
+    left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+    return f"{left},{top},{right},{bottom}"
+
+
 def is_window_minimized(title_substring: str = "masterduel") -> bool:
     """检测指定标题的窗口是否处于最小化状态。
 

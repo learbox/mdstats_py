@@ -1060,8 +1060,12 @@ class MainWindow(QMainWindow):
         """
         from src.stats_worker import StatsWorker
         from src.rank_detector import RankDetector
+        from src.failure_sample_manager import FailureSampleManager
 
-        self._worker = StatsWorker()
+        # 创建失败样本管理器（两个线程共用同一实例）
+        failure_mgr = FailureSampleManager(self._config)
+
+        self._worker = StatsWorker(failure_mgr=failure_mgr)
         self._worker.status_update.connect(self._on_status)
         self._worker.coin_win_detected.connect(self._on_coin_win_detected)
         self._worker.rank_detected.connect(self._on_rank_detected)
@@ -1076,7 +1080,7 @@ class MainWindow(QMainWindow):
         # rank_icon_detected 信号在双方都检测到后发射，
         # 主窗口收到信号后更新状态栏 + 暂存结果等对局结束写入 CSV。
         if self._config.get("rank_detection", {}).get("enabled", True):
-            self._rank_detector = RankDetector()
+            self._rank_detector = RankDetector(failure_mgr=failure_mgr)
             self._rank_detector.rank_icon_detected.connect(self._on_rank_icon_detected)
             self._rank_detector.partial_update.connect(self._on_rank_partial)
             self._rank_detector.start()  # QThread.start() → 后台独立线程执行 run()

@@ -160,6 +160,10 @@ log_mode = false
 log_scope = ["status", "screenshots", "errors"]
 # 状态栏显示置信度（段位图标 NCC、等级判读、三阶段检测分数）
 show_confidence = false
+# 保存最佳失败样本（置信度处于 [设置值−偏移量, 设置值) 时记录）
+save_failure_samples = false
+# 置信度偏移量（设置值 − offset = 记录下限）
+failure_sample_offset = 0.10
 
 # 系统通知
 [notification]
