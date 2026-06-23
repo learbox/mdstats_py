@@ -1025,7 +1025,7 @@ def detect_rank_icon(
             search_roi = screenshot[py:py + ph, px:px + pw]
 
             best_name, best_score = "", 0.0
-            best_x = best_y = best_sz = 0
+            best_x = best_y = best_w = 0
             for name in _RANK_LABELS:
                 sz_start = max(30, cw - 15)
                 sz_end = min(cw + 18, pw, ph)
@@ -1035,11 +1035,11 @@ def detect_rank_icon(
                 side_scores[name] = sc
                 if sc > best_score:
                     best_name, best_score = nm, sc
-                    best_x, best_y, best_sz = bx, by, bz
+                    best_x, best_y, best_w = bx, by, bz
             if best_score < threshold or best_name in ("", None):
                 _last_rank_icon_all_scores[side] = side_scores
                 continue
-            name, score, rx, ry, rsz = best_name, best_score, best_x, best_y, best_sz
+            name, score, rx, ry, rw = best_name, best_score, best_x, best_y, best_w
         else:
             # ===== 首次检测：缩略图粗搜 → 映射 → 原图精搜修正 =====
             name, score, fx, fy, fsz, side_scores = _detect_rank_in_roi(
@@ -1052,19 +1052,19 @@ def detect_rank_icon(
 
             rx = int(fx / scale)
             ry = int(fy / scale)
-            rsz = int(fsz / scale)
+            rw = rh = int(fsz / scale)
 
-            sx2, sy2, sw, sh = _search_bbox(rx, ry, rsz, rsz)
+            sx2, sy2, sw, sh = _search_bbox(rx, ry, rw, rh)
             search_roi = screenshot[sy2:sy2 + sh, sx2:sx2 + sw]
-            tmpl = _composite_rank_icon(name, rsz, bg_color)
+            tmpl = _composite_rank_icon(name, rw, bg_color)
             if tmpl is not None:
                 res = cv2.matchTemplate(search_roi, tmpl, cv2.TM_CCOEFF_NORMED)
                 _, _, _, loc = cv2.minMaxLoc(res)
                 rx = sx2 + loc[0]
                 ry = sy2 + loc[1]
 
-            _position_cache[pos_key] = (rx, ry, rsz, rsz)
-            save_icon_position(w, h, side, rx, ry, rsz, rsz)
+            _position_cache[pos_key] = (rx, ry, rw, rh)
+            save_icon_position(w, h, side, rx, ry, rw, rh)
 
         # 存储该侧所有图标分数（供 TOML 元数据）
         _last_rank_icon_all_scores[side] = side_scores
@@ -1076,7 +1076,7 @@ def detect_rank_icon(
         result[f"{side}_score"] = score
         # 巅峰不检测等级数字（_NO_TIER_RANKS）
         if rank_label not in _NO_TIER_RANKS:
-            tier, tier_conf = _detect_tier_number(screenshot, rx, ry, rsz, threshold)
+            tier, tier_conf = _detect_tier_number(screenshot, rx, ry, rw, threshold)
             result[f"{side}_tier"] = tier
             result[f"{side}_tier_score"] = tier_conf
         else:
