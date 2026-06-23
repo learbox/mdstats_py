@@ -470,8 +470,9 @@ class FailureSampleManager:
         # [all_scores] 子表
         if "all_scores" in meta:
             lines.append("# ---- 所有候选模板匹配分数 ----")
-            lines.append("# 可用于诊断：如果全部模板分数都很低，说明整体识别环境有问题；")
-            lines.append("# 如果只是个别模板低分，说明该模板本身可能需要更新。")
+            lines.append("# 健康的识别：正确模板高分、其他模板低分（差距大 = 区分度高）")
+            lines.append("# 需排查：两个模板分数接近——说明模板区分度不够，考虑重新截取")
+            lines.append("# 需排查：全部模板分数都很低——整体环境问题（分辨率/素材失效）")
             lines.append("[all_scores]")
             for k, v in meta["all_scores"].items():
                 lines.append(f"{k} = {v}")
