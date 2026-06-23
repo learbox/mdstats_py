@@ -246,9 +246,15 @@ class StatsWorker(QThread):
             符合 FailureSampleManager.consider() extra_meta 格式的字典。
         """
         roi_info = _det.get_last_roi_info()
+        # 短名称 → 完整路径（如 "coin_win" → "resource/templates/1600x900/coin_win.png"）
+        tmpl_name = _det.get_last_matched_template()
+        tmpl_path = ""
+        if tmpl_name and self._current_size:
+            res = f"{self._current_size[0]}x{self._current_size[1]}"
+            tmpl_path = f"resource/templates/{res}/{tmpl_name}.png"
         meta: dict = {
             "all_scores": _det.get_last_all_scores(),
-            "matched_template": _det.get_last_matched_template(),
+            "matched_template": tmpl_path,
         }
         if roi_info:
             meta["roi_name"] = roi_info.get("roi_name", "")

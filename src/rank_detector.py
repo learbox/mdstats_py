@@ -214,6 +214,8 @@ class RankDetector(QThread):
                     # 该侧的段位图标 NCC 匹配分数
                     side_score = float(result.get(f"{side}_score", 0.0))
                     rank_label = result.get(f"{side}_rank")
+                    # 原始图标文件名（如 "img_rankicon_04"，用于拼接完整路径）
+                    icon_name = result.get(f"{side}_icon")
                     # 等级数字识别结果（I~V，巅峰没有）
                     tier_val = result.get(f"{side}_tier")
                     tier_score = float(result.get(f"{side}_tier_score", 0.0))
@@ -222,8 +224,8 @@ class RankDetector(QThread):
                     extra: dict = {
                         "all_scores": _det.get_rank_icon_all_scores(side),
                     }
-                    if rank_label:
-                        extra["matched_template"] = str(rank_label)
+                    if icon_name:
+                        extra["matched_template"] = f"resource/templates/rankicons/{icon_name}_l.png"
                     if isinstance(tier_val, int) and 1 <= tier_val <= 5:
                         tier_str = ["", "I", "II", "III", "IV", "V"][tier_val]
                         extra["tier_detected"] = tier_str
@@ -244,9 +246,9 @@ class RankDetector(QThread):
 
             if self._result:
                 for k in ("player_rank", "player_tier", "player_score",
-                          "player_tier_score",
+                          "player_tier_score", "player_icon",
                           "opponent_rank", "opponent_tier", "opponent_score",
-                          "opponent_tier_score"):
+                          "opponent_tier_score", "opponent_icon"):
                     if not self._result.get(k) and result.get(k):
                         self._result[k] = result[k]
             else:

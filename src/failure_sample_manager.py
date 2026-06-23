@@ -405,7 +405,7 @@ class FailureSampleManager:
             "confidence":       "本次匹配置信度 (0~1)",
             "threshold":        "识别成功阈值 (>= 此值视为成功)",
             "record_threshold": "失败样本记录下限 (threshold − offset)",
-            "matched_template": "匹配到的模板文件名",
+            "matched_template": "最佳匹配的模板文件路径",
             "roi_name":         "ROI 配置段名",
             "roi":              "本次使用的 ROI 坐标 [x, y, w, h]",
             "roi_source":       'ROI 来源: "preset"=预设 / "fullscreen"=全图兜底',

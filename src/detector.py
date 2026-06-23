@@ -307,7 +307,7 @@ def _detect_with_roi(
     global _last_match_score, _last_all_scores, _last_matched_template, _last_roi_info
     _last_match_score = best_score
     _last_all_scores = all_scores
-    _last_matched_template = best_key if best_score >= threshold else ""
+    _last_matched_template = best_key  # 无论是否达标都记录（失败样本需要知道最接近哪个模板）
     _last_roi_info = {
         "roi_name": roi_section,
         "roi": list(roi) if roi else [0, 0, screenshot.shape[1], screenshot.shape[0]],
@@ -403,7 +403,7 @@ def detect_rank(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
     global _last_match_score, _last_all_scores, _last_matched_template, _last_roi_info
     _last_match_score = best_score
     _last_all_scores = all_scores
-    _last_matched_template = best_key if best_score >= threshold else ""
+    _last_matched_template = best_key  # 无论是否达标都记录（失败样本需要知道最接近哪个模板）
     _last_roi_info = {
         "roi_name": "rank",
         "roi": list(roi) if roi else [0, 0, screenshot.shape[1], screenshot.shape[0]],
@@ -452,12 +452,15 @@ def get_last_all_scores() -> dict[str, float]:
 
 
 def get_last_matched_template() -> str:
-    """最近一次 detect_* 检测到的模板名（不含扩展名）。
+    """最近一次 detect_* 检测到的最佳模板完整路径。
 
-    仅在检测成功（分数 >= 阈值）时有值，否则返回空字符串。
-    例如 detect_coin_win 匹配到 coin_win.png 时返回 "coin_win"。
+    格式: "resource/templates/{分辨率}/模板名.png"
+    例如: "resource/templates/1600x900/coin_win.png"
 
-    调用时机：紧接在检测成功之后。
+    无论是否达到阈值都返回（失败样本记录需要知道最接近哪个模板文件）。
+    如果没有任何模板被检测到，返回空字符串。
+
+    调用时机：紧接在 detect_* 之后，下一次 detect_* 调用会覆盖。
     用途：填充 TOML 元数据的 matched_template 字段。
     """
     return _last_matched_template
@@ -1020,7 +1023,9 @@ def detect_rank_icon(
     # 初始化结果字典（双方都从 None 开始）
     result: dict[str, str | int | float | None] = {
         "player_rank": None, "player_tier": None, "player_score": 0.0, "player_tier_score": 0.0,
+        "player_icon": None,
         "opponent_rank": None, "opponent_tier": None, "opponent_score": 0.0, "opponent_tier_score": 0.0,
+        "opponent_icon": None,
     }
 
     # 缩略图粗搜：缩到 600px 宽，大幅减少匹配运算量
@@ -1107,6 +1112,7 @@ def detect_rank_icon(
         # 写入结果
         rank_label = _RANK_LABELS.get(name, name)
         result[f"{side}_rank"] = rank_label
+        result[f"{side}_icon"] = name  # 原始图标文件名（用于拼接模板路径）
         result[f"{side}_score"] = score
         # 巅峰不检测等级数字（_NO_TIER_RANKS）
         if rank_label not in _NO_TIER_RANKS:
