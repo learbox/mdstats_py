@@ -36,30 +36,27 @@
 2. 模板是否截取了特征明显的 UI 区域（纯色块 > 小图标 > 高频复用的文字）
 3. 在 `config.toml` 中适当调整 `detection.confidence_threshold`（降低 = 更敏感）
 
-### 识别接近成功但不触发
+### 一直检测不到（硬币/先后攻/胜负始终不触发）
 
-**表现**：状态栏显示置信度一直在 0.7 左右，差一点才能识别成功，但始终不过。
+**典型场景**：游戏更新后字体或 UI 变了，旧模板失效；或者换显示器后分辨率不匹配。
 
-**检查**：
-1. 在设置 → 识别 → 调试设置中勾选「保存最佳失败样本」并设置合适的置信度偏移（如 0.10），程序会自动保存 `screenshots/debug/` 下最接近成功的截图和诊断信息
-2. 打开 `screenshots/debug/` 目录，查看对应的 PNG 截图和 TOML 文件——TOML 中包含所有候选模板的匹配分数、ROI 坐标、窗口尺寸等诊断数据
-3. 如果 `[all_scores]` 中全部模板分数都很低 → 整体识别环境有问题（如分辨率不匹配或模板素材失效）
-4. 如果只是个别模板低分 → 该模板本身可能需要更新（重新截取）
-5. 如果 `matched_template` 指向的模板与预期不符 → 模板区分度不够，需要重新截取特征更明显的区域
+**排查步骤**：
 
-### 段位图标从缓存位置搜不到
+1. **开启调试功能**：设置 → 识别 → 调试设置 → 勾选「保存最佳失败样本」，配置文件中的 `debug.save_failure_samples` 设为 `true`
+2. 置信度偏移量（`debug.failure_sample_offset`）控制记录范围——偏移量越大越容易触发记录，默认 0.10 通常够用
+3. **正常玩游戏**：让程序跑几局。程序会把每一阶段中最接近成功的截图和诊断信息自动保存到 `screenshots/debug/` 目录
+4. **分析失败样本**：打开 `screenshots/debug/`，每个 target 至多一个 PNG + TOML 文件：
+   - 看 `[all_scores]` 中的各模板分数——**全部低分**说明整体环境有问题（分辨率不匹配/模板失效），**个别低分**说明该模板需更新
+   - 看 `matched_template` —— 如果匹配到的模板名和预期不符，说明模板之间区分度不够
+   - 看 `roi` 和 `window_rect` —— 排查搜索区域偏移和多显示器问题
+5. **根据诊断结果修复**模板或调参，问题解决后关掉功能即可
+6. `screenshots/debug/` 文件不会自动清理，排查完毕后可手动删除
 
-**表现**：状态栏无段位信息，或首次检测通过但后续检测失败。
+### 段位图标检测突然失效（切换分辨率/窗口后）
 
-**原因**：`resource/templates/rankicons/rank_positions.toml` 中的缓存坐标已失效（如游戏窗口位置/大小变化）。
+**原因**：`resource/templates/rankicons/rank_positions.toml` 缓存的坐标基于旧窗口位置，窗口移动后可能偏移出搜索范围。
 
-**解决**：
-1. 删除 `resource/templates/rankicons/rank_positions.toml`，下次检测时自动重新全图搜索并建立新缓存
-2. 同样，`resource/templates/{分辨率}/roi.toml` 中的搜索区域也可以通过删除该文件重置
-
-### 失败样本 / debug 目录积攒过多
-
-`debug/` 下的文件不会自动清理。定期手动删除 `screenshots/debug/` 即可。每个 target 至多保留一个文件，不会无限增长。
+**解决**：删除 `resource/templates/rankicons/rank_positions.toml`，下次检测到段位图标时自动重新全图搜索并写入新缓存。同样，`resource/templates/{分辨率}/roi.toml` 也可删除重置。
 
 ## 界面显示
 
