@@ -114,6 +114,30 @@ _REQUIRED_TEMPLATES = ["coin_win", "coin_lose", "go_first", "go_second", "victor
 # 最近一次检测的最高匹配分数（供状态栏显示，0.0 = 无检测）
 _last_match_score: float = 0.0
 
+# 最近一次检测的所有模板分数 {模板名: 分数}，供 TOML 元数据使用
+# 例: {"coin_win": 0.72, "coin_lose": 0.18}
+# 由 _detect_with_roi() 和 detect_rank() 填充，get_last_all_scores() 读取。
+# 调用方用此数据填充 TOML 的 [all_scores] 字段，开发者可据此判断
+# 是单一模板低分（如 coin_win=0.72 但 coin_lose=0.18）还是全部模板都低分。
+_last_all_scores: dict[str, float] = {}
+
+# 最近一次检测匹配到的模板名（不含扩展名），如 "coin_win"
+# 仅在分数 >= 阈值时有值，否则为空字符串。
+# 用于 TOML 元数据的 matched_template 字段。
+_last_matched_template: str = ""
+
+# 最近一次检测使用的 ROI 信息，供 TOML 元数据使用
+# 结构: {"roi_name": "coin", "roi": [x,y,w,h], "roi_source": "preset"|"fullscreen"}
+# 由 _detect_with_roi() 和 detect_rank() 填充，get_last_roi_info() 读取。
+_last_roi_info: dict[str, object] = {}
+
+# 最近一次段位图标检测的所有图标分数
+# 结构: {side: {图标名: 分数}}
+# 例: {"player": {"img_rankicon_04": 0.65, "img_rankicon_05": 0.42}, ...}
+# 由 detect_rank_icon() 填充，get_rank_icon_all_scores(side) 读取。
+# 用于段位图标 TOML 的 [all_scores] 字段。
+_last_rank_icon_all_scores: dict[str, dict[str, float]] = {}
+
 # 可选模板：缺失时不阻止检测启动，detect_rank() 会自动返回 None
 _OPTIONAL_TEMPLATES = {"rank_up", "rank_down"}
 
@@ -261,16 +285,34 @@ def _detect_with_roi(
 
     如果当前分辨率有 roi.toml 配置，裁剪到 ROI 区域搜索（~18 倍加速）；
     否则全图搜索作为兜底。
+
+    除了返回值外，本函数还会更新以下模块级全局变量（副作用）：
+        _last_match_score    — 最高匹配分数（供状态栏显示）
+        _last_all_scores     — 所有模板的独立分数（供 TOML 元数据）
+        _last_matched_template — 匹配成功的模板名（供 TOML 元数据）
+        _last_roi_info       — 本次使用的 ROI 信息（供 TOML 元数据）
+
+    这些变量由对应的 getter 函数读取，调用方应在检测后立即调用 getter
+    （因为下一次 detect_* 调用会覆盖它们）。
     """
     roi = _get_roi(roi_section)
     search_area = screenshot[roi[1]:roi[1] + roi[3], roi[0]:roi[0] + roi[2]] if roi else screenshot
     best_key, best_score = "", 0.0
+    all_scores: dict[str, float] = {}
     for key in templates:
         score = match_template(search_area, key)
+        all_scores[key] = score
         if score > best_score:
             best_score, best_key = score, key
-    global _last_match_score
+    global _last_match_score, _last_all_scores, _last_matched_template, _last_roi_info
     _last_match_score = best_score
+    _last_all_scores = all_scores
+    _last_matched_template = best_key if best_score >= threshold else ""
+    _last_roi_info = {
+        "roi_name": roi_section,
+        "roi": list(roi) if roi else [0, 0, screenshot.shape[1], screenshot.shape[0]],
+        "roi_source": "preset" if roi else "fullscreen",
+    }
     if best_score >= threshold:
         return result_map.get(best_key)
     return None
@@ -346,18 +388,27 @@ def detect_rank(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
 
     best_key, best_score = "", 0.0
     best_x = best_y = 0
+    all_scores: dict[str, float] = {}
     for key in ("rank_up", "rank_down"):
         result = match_template(search, key, get_pos=True)
         if isinstance(result, tuple):
             score, mx, my = result
         else:
             score, mx, my = result, 0, 0
+        all_scores[key] = score
         if score > best_score:
             best_score, best_key = score, key
             best_x, best_y = ox + mx, oy + my
 
-    global _last_match_score
+    global _last_match_score, _last_all_scores, _last_matched_template, _last_roi_info
     _last_match_score = best_score
+    _last_all_scores = all_scores
+    _last_matched_template = best_key if best_score >= threshold else ""
+    _last_roi_info = {
+        "roi_name": "rank",
+        "roi": list(roi) if roi else [0, 0, screenshot.shape[1], screenshot.shape[0]],
+        "roi_source": "preset" if roi else "fullscreen",
+    }
 
     if best_score >= threshold and best_key:
         # 首次检测到时自动持久化 rank ROI（模板位置 ±50px 冗余）
@@ -376,8 +427,75 @@ def detect_rank(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
 
 
 def get_last_score() -> float:
-    """最近一次 detect_* 调用的最高匹配分数（0.0 = 无结果）。"""
+    """最近一次 detect_* 调用的最高匹配分数（0.0 = 无结果）。
+
+    调用时机：紧接在 detect_coin_win/detect_turn/detect_result 之后。
+    用途：状态栏显示置信度。
+    """
     return _last_match_score
+
+
+def get_last_all_scores() -> dict[str, float]:
+    """最近一次 detect_* 调用中所有候选模板的独立匹配分数。
+
+    与 get_last_score() 的区别：
+        get_last_score() 返回最高分（如 0.85），
+        get_last_all_scores() 返回所有模板的分数字典（如 {"coin_win": 0.85, "coin_lose": 0.12}）。
+
+    调用时机：紧接在 detect_* 之后，下一次 detect_* 调用会覆盖。
+    用途：填充 TOML 元数据的 [all_scores] 字段，帮助开发者诊断
+          是单一模板低分还是全部模板都低分。
+
+    例如 coin 检测返回 {"coin_win": 0.72, "coin_lose": 0.18}。
+    """
+    return dict(_last_all_scores)
+
+
+def get_last_matched_template() -> str:
+    """最近一次 detect_* 检测到的模板名（不含扩展名）。
+
+    仅在检测成功（分数 >= 阈值）时有值，否则返回空字符串。
+    例如 detect_coin_win 匹配到 coin_win.png 时返回 "coin_win"。
+
+    调用时机：紧接在检测成功之后。
+    用途：填充 TOML 元数据的 matched_template 字段。
+    """
+    return _last_matched_template
+
+
+def get_last_roi_info() -> dict[str, object]:
+    """最近一次检测使用的 ROI（感兴趣区域）信息。
+
+    返回字典的字段说明：
+        roi_name   — 配置段名，如 "coin"、"turn"、"result"、"rank"
+        roi        — 本次使用的 ROI 坐标 [x, y, w, h]
+        roi_source — ROI 来源: "preset"（从 roi.toml 读取）或 "fullscreen"（全图兜底）
+
+    调用时机：紧接在 detect_* 之后。
+    用途：填充 TOML 元数据的 roi_name/roi/roi_source 字段，
+          帮助开发者排查 ROI 偏移问题。
+    """
+    return dict(_last_roi_info)
+
+
+def get_rank_icon_all_scores(side: str) -> dict[str, float]:
+    """最近一次 detect_rank_icon() 中指定侧的所有段位图标匹配分数。
+
+    与三阶段检测不同，段位检测要匹配 8 种图标（新手~大师+巅峰），
+    这个函数返回所有 8 种的分数，帮助诊断是哪一种被误判。
+
+    Args:
+        side: "player"（己方）或 "opponent"（对方）
+
+    Returns:
+        {图标文件名: 分数} 字典。
+        例: {"img_rankicon_04": 0.65, "img_rankicon_05": 0.42, ...}
+        如果该侧未检测到，返回空字典 {}。
+
+    调用时机：紧接在 detect_rank_icon() 之后。
+    用途：填充段位图标 TOML 元数据的 [all_scores] 字段。
+    """
+    return dict(_last_rank_icon_all_scores.get(side, {}))
 
 
 # =============================================================================
@@ -618,7 +736,7 @@ def _match_icon_at_sizes(
 def _detect_rank_in_roi(
     screenshot: np.ndarray, roi_x: int, roi_y: int, roi_w: int, roi_h: int,
     bg_color: np.ndarray, threshold: float = 0.7,
-) -> tuple[str | None, float, int, int, int]:
+) -> tuple[str | None, float, int, int, int, dict[str, float]]:
     """在截图的指定 ROI（感兴趣区域）内搜索最佳段位图标。
 
     采用"粗搜 + 精搜"两阶段策略：
@@ -639,7 +757,8 @@ def _detect_rank_in_roi(
         threshold: 匹配置信度阈值
 
     Returns:
-        (图标名 | None, 最高分数, best_x, best_y, best_尺寸)
+        (图标名 | None, 最高分数, best_x, best_y, best_尺寸, all_scores字典)
+        all_scores: {图标文件名: 最佳匹配分数}，如 {"img_rankicon_04": 0.65, ...}
     """
     _init_rank_icons()  # 确保图标已加载
 
@@ -652,11 +771,13 @@ def _detect_rank_in_roi(
 
     best_name, best_score = "", 0.0
     best_x, best_y, best_sz = 0, 0, 0
+    all_scores: dict[str, float] = {}
 
     for name in _RANK_LABELS:
         # 粗搜：步长 12px，快速扫描
         nm, sc, bx, by, bz = _match_icon_at_sizes(
             roi, name, range(min_sz, max_sz, 12), bg_color, roi_x, roi_y)
+        all_scores[name] = sc
         if sc > best_score:
             best_name, best_score = nm, sc
             best_x, best_y, best_sz = bx, by, bz
@@ -666,13 +787,14 @@ def _detect_rank_in_roi(
             fine_end = min(max_sz, best_sz + 12)
             nm, sc, bx, by, bz = _match_icon_at_sizes(
                 roi, name, range(fine_start, fine_end, 2), bg_color, roi_x, roi_y)
+            all_scores[name] = max(all_scores[name], sc)
             if sc > best_score:
                 best_name, best_score = nm, sc
                 best_x, best_y, best_sz = bx, by, bz
 
     if best_score < threshold or best_name in ("", None):
-        return None, best_score, 0, 0, 0  # 分数不够 → 视为未检测到
-    return best_name, best_score, best_x, best_y, best_sz
+        return None, best_score, 0, 0, 0, all_scores
+    return best_name, best_score, best_x, best_y, best_sz, all_scores
 
 
 def _detect_tier_number(
@@ -904,12 +1026,17 @@ def detect_rank_icon(
         y = max(0, center_y - icon_sz // 4)
         return x, y, min(icon_sz * 2, w - x), min(icon_sz * 2, h - y)
 
+    # 收集每侧所有图标的最佳分数（供 TOML 元数据 all_scores 字段）
+    global _last_rank_icon_all_scores
+    _last_rank_icon_all_scores = {}
+
     for side, sx in [("player", 0), ("opponent", small.shape[1] - small_roi_w)]:
         if side in skip_sides:
             continue
 
         pos_key = (w, h, side)
         cached = _position_cache.get(pos_key)
+        side_scores: dict[str, float] = {}
 
         if cached:
             # ===== 有位置缓存：在已知位置附近精搜 =====
@@ -925,19 +1052,22 @@ def detect_rank_icon(
                 nm, sc, bx, by, bz = _match_icon_at_sizes(
                     search_roi, name, range(sz_start, sz_end, 3),
                     bg_color, px, py, strict_roi=True)
+                side_scores[name] = sc
                 if sc > best_score:
                     best_name, best_score = nm, sc
                     best_x, best_y, best_sz = bx, by, bz
             if best_score < threshold or best_name in ("", None):
+                _last_rank_icon_all_scores[side] = side_scores
                 continue
             name, score, rx, ry, rsz = best_name, best_score, best_x, best_y, best_sz
         else:
             # ===== 首次检测：缩略图粗搜 → 映射 → 原图精搜修正 =====
-            name, score, fx, fy, fsz = _detect_rank_in_roi(
+            name, score, fx, fy, fsz, side_scores = _detect_rank_in_roi(
                 small, sx, 0, small_roi_w, small_roi_h,
                 bg_color, threshold,
             )
             if name is None:
+                _last_rank_icon_all_scores[side] = side_scores
                 continue
 
             rx = int(fx / scale)
@@ -955,6 +1085,9 @@ def detect_rank_icon(
 
             _position_cache[pos_key] = (rx, ry, rsz)
             _save_position_cache()
+
+        # 存储该侧所有图标分数（供 TOML 元数据）
+        _last_rank_icon_all_scores[side] = side_scores
 
         # 写入结果
         rank_label = _RANK_LABELS.get(name, name)

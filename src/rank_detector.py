@@ -33,6 +33,7 @@ from PySide6.QtCore import QThread, Signal
 from src import capture as _cap
 from src import detector as _det
 from src.config import load_config
+from src.failure_sample_manager import FailureSampleManager
 
 
 class RankDetector(QThread):
@@ -60,12 +61,18 @@ class RankDetector(QThread):
     rank_icon_detected = Signal(dict)  # 双方都检测到时发射（完整结果）
     partial_update = Signal(dict)      # 首次检测到单方时发射（增量进度）
 
-    def __init__(self, parent=None):
+    def __init__(self, failure_mgr: FailureSampleManager | None = None,
+                 parent=None):
         """初始化段位检测线程，从 config.toml 读取配置。
 
-        parent 参数是 QObject 的所有权管理（Qt 会在 parent 销毁时
-        自动清理子对象），这里通常传 None，因为 QThread 由主窗口
-        手动管理生命周期。
+        关于 failure_mgr（最佳失败样本）：
+            由 MainWindow 创建并传入，与 StatsWorker 共用同一实例。
+            每次检测后对 my_rank_icon 和 opponent_rank_icon 调用 consider()，
+            新一轮开始时（resume_for_next_game）调用 clear_cache() 清空缓存。
+
+        Args:
+            failure_mgr: 最佳失败样本管理器实例。为 None 时功能不生效。
+            parent: Qt 父对象。
         """
         super().__init__(parent)
         cfg = load_config()
@@ -75,6 +82,7 @@ class RankDetector(QThread):
         self._running = False               # 线程主循环开关
         self._paused = False                # 暂停标志（一局结束到下一局开始之间）
         self._result: dict | None = None    # 暂存当前这局的检测结果
+        self._failure_mgr = failure_mgr     # 失败样本管理器
 
     # =========================================================================
     # 主线程接口 — 以下方法由主线程调用，控制检测线程的行为
@@ -113,9 +121,13 @@ class RankDetector(QThread):
         必须清空 _result：上一局的检测数据还在里面，
         如果不清理，线程恢复后第一帧就会因为双方都已"检测到"
         而直接发射旧结果，导致状态栏显示错乱的段位信息。
+
+        同时清空失败样本缓存（新一局从空缓存开始）。
         """
         self._result = None  # 清除旧数据，否则会被误发射
         self._paused = False
+        if self._failure_mgr is not None:
+            self._failure_mgr.clear_cache()
 
     def stop(self) -> None:
         """优雅停止线程。不强制 kill，只把 _running 设为 False。
@@ -188,6 +200,42 @@ class RankDetector(QThread):
                                                skip_sides=skip or None)
             except (cv2.error, ValueError):
                 result = {}  # 检测异常时返回空结果，下一轮重试
+
+            # ---- 失败样本记录：段位图标两项 ----
+            # 和三阶段检测同理：每个 target 独立提交自己的置信度分数。
+            # 段位图标比较特殊——除了图标 NCC 匹配分数外，
+            # 还有"等级数字识别"（I~V 的列投影），其分数也写入 TOML 供诊断。
+            if self._failure_mgr is not None and result:
+                # 收集窗口信息（排查多显示器/DPI 缩放问题）
+                size = _cap.get_client_size("masterduel")
+                rect = _cap.get_window_rect("masterduel")
+                for side, target in [("player", "my_rank_icon"),
+                                     ("opponent", "opponent_rank_icon")]:
+                    # 该侧的段位图标 NCC 匹配分数
+                    side_score = float(result.get(f"{side}_score", 0.0))
+                    rank_label = result.get(f"{side}_rank")
+                    # 等级数字识别结果（I~V，巅峰没有）
+                    tier_val = result.get(f"{side}_tier")
+                    tier_score = float(result.get(f"{side}_tier_score", 0.0))
+
+                    # 组装 extra_meta：包含该侧所有图标候选的匹配分 + 等级信息
+                    extra: dict = {
+                        "all_scores": _det.get_rank_icon_all_scores(side),
+                    }
+                    if rank_label:
+                        extra["matched_template"] = str(rank_label)
+                    if isinstance(tier_val, int) and 1 <= tier_val <= 5:
+                        tier_str = ["", "I", "II", "III", "IV", "V"][tier_val]
+                        extra["tier_detected"] = tier_str
+                        extra["tier_score"] = tier_score
+                    if size:
+                        extra["client_size"] = f"{size[0]}x{size[1]}"
+                    if rect:
+                        extra["window_rect"] = rect
+
+                    self._failure_mgr.consider(
+                        target, side_score, screenshot,
+                        self._threshold, extra)
 
             # ---- 合并多次检测结果 ----
             # 记录合并前的状态，用于判断是否有新发现

@@ -41,8 +41,9 @@ from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QColorDialog, QComboBox, QDialog,
     QDoubleSpinBox, QFontComboBox, QFrame, QGroupBox, QHBoxLayout, QLabel,
-    QLineEdit, QListWidget, QMessageBox, QPushButton, QRadioButton, QSlider,
-    QSpinBox, QTabWidget, QVBoxLayout, QWidget, QButtonGroup,
+    QLineEdit, QListWidget, QMessageBox, QPushButton, QRadioButton,
+    QScrollArea, QSlider, QSpinBox, QTabWidget, QVBoxLayout, QWidget,
+    QButtonGroup,
 )
 
 from ui._base_dialog import _BaseFramelessDialog
@@ -406,10 +407,33 @@ class ConfigDialog(_BaseFramelessDialog):
     # =========================================================================
 
     def _make_detection_tab(self) -> QWidget:
-        """创建"识别"标签页：截图间隔、匹配阈值、保存截图、热键设置。"""
+        """创建"识别"标签页。
+
+        布局分为两个分组：
+            功能设置 — 三阶段检测 + 段位检测（日常使用需调整的参数）
+            调试设置 — 保存截图、热键、最佳失败样本（排查问题时才需要）
+        """
+        # 内容较多，包裹在可滚动的区域中
         w = QWidget()
         lo = QVBoxLayout(w)
-        lo.setSpacing(12)
+        lo.setSpacing(10)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(w)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+
+        # ═══════════════════════════════════════════════════════════
+        # 功能设置
+        # ═══════════════════════════════════════════════════════════
+        func_label = QLabel("功能设置")
+        func_label.setStyleSheet("font-weight: bold; font-size: 13px;")
+        lo.addWidget(func_label)
+
+        # ---- 三阶段检测 ----
+        stage_title = QLabel("三阶段检测（硬币/先后攻/胜负）")
+        stage_title.setStyleSheet("color: #666; font-size: 12px;")
+        lo.addWidget(stage_title)
 
         r = QHBoxLayout()
         r.addWidget(QLabel("截图间隔:"))
@@ -440,6 +464,57 @@ class ConfigDialog(_BaseFramelessDialog):
         r2.addStretch()
         lo.addLayout(r2)
 
+        # ---- 段位图标检测 ----
+        # 分隔线 + 标题，视觉上从属于"功能设置"
+        sep_rank = QFrame()
+        sep_rank.setFrameShape(QFrame.Shape.HLine)
+        lo.addWidget(sep_rank)
+
+        rank_title = QLabel("段位图标检测（独立线程）")
+        rank_title.setStyleSheet("color: #666; font-size: 12px;")
+        lo.addWidget(rank_title)
+
+        self._rank_enabled_cb = QCheckBox("启用段位图标检测")
+        self._rank_enabled_cb.setToolTip(
+            "独立线程持续截图检测双方段位图标（新手~大师 + I~V），\n"
+            "检测到后写入 CSV 己方段位/对方段位列。"
+        )
+        self._rank_enabled_cb.toggled.connect(self._on_rank_enabled_toggled)
+        lo.addWidget(self._rank_enabled_cb)
+
+        rk_row1 = QHBoxLayout()
+        rk_row1.addWidget(QLabel("截图间隔:"))
+        self._rank_interval = QDoubleSpinBox()
+        self._rank_interval.setRange(0.2, 2.0)
+        self._rank_interval.setSingleStep(0.1)
+        self._rank_interval.setSuffix(" 秒")
+        self._rank_interval.setToolTip("段位图标仅在硬币阶段显示约 2 秒，间隔越短越不容易错过。")
+        rk_row1.addWidget(self._rank_interval)
+        rk_row1.addStretch()
+        lo.addLayout(rk_row1)
+
+        rk_row2 = QHBoxLayout()
+        rk_row2.addWidget(QLabel("置信度阈值:"))
+        self._rank_threshold = QDoubleSpinBox()
+        self._rank_threshold.setRange(0.5, 0.95)
+        self._rank_threshold.setSingleStep(0.05)
+        self._rank_threshold.setToolTip("模板匹配置信度阈值。推荐 0.7。太高可能漏检，太低可能误检。")
+        rk_row2.addWidget(self._rank_threshold)
+        rk_row2.addStretch()
+        lo.addLayout(rk_row2)
+
+        # ═══════════════════════════════════════════════════════════
+        # 调试设置
+        # ═══════════════════════════════════════════════════════════
+        sep_main = QFrame()
+        sep_main.setFrameShape(QFrame.Shape.HLine)
+        lo.addWidget(sep_main)
+        lo.addSpacing(4)
+
+        dbg_label = QLabel("调试设置")
+        dbg_label.setStyleSheet("font-weight: bold; font-size: 13px;")
+        lo.addWidget(dbg_label)
+
         # ---- 保存检测截图 ----
         ss_row = QHBoxLayout()
         self._save_screenshots_cb = QCheckBox("保存检测截图")
@@ -456,7 +531,6 @@ class ConfigDialog(_BaseFramelessDialog):
         ss_row.addStretch()
         lo.addLayout(ss_row)
 
-        # 子复选框（缩进，仅截图保存开启时可用）
         self._auto_clear_cb = QCheckBox("下一局开始时自动清除截图")
         self._auto_clear_cb.setToolTip("勾选后截图只保留最近一局。取消后截图持续累积。")
         auto_row = QHBoxLayout()
@@ -466,6 +540,42 @@ class ConfigDialog(_BaseFramelessDialog):
         lo.addLayout(auto_row)
         self._save_screenshots_cb.toggled.connect(
             lambda on: self._set_sub_disabled(self._auto_clear_cb, not on))
+
+        # ---- 保存最佳失败样本 ----
+        fail_row = QHBoxLayout()
+        self._failure_samples_cb = QCheckBox("保存最佳失败样本")
+        self._failure_samples_cb.setToolTip(
+            "当识别置信度处于 [设置值−偏移量, 设置值) 区间时，\n"
+            "自动保留该阶段内最佳失败样本到 screenshots/debug/，\n"
+            "用于问题排查和模板更新。"
+        )
+        fail_row.addWidget(self._failure_samples_cb)
+        self._btn_view_debug = QPushButton("查看样本")
+        self._btn_view_debug.setFixedWidth(88)
+        self._btn_view_debug.clicked.connect(self._open_debug_dir)
+        self._btn_view_debug.setToolTip("在文件资源管理器中打开失败样本文件夹。")
+        fail_row.addWidget(self._btn_view_debug)
+        fail_row.addStretch()
+        lo.addLayout(fail_row)
+
+        offset_row = QHBoxLayout()
+        offset_row.setContentsMargins(24, 0, 0, 0)
+        offset_row.addWidget(QLabel("置信度偏移:"))
+        self._failure_offset = QDoubleSpinBox()
+        self._failure_offset.setRange(0.01, 0.50)
+        self._failure_offset.setSingleStep(0.01)
+        self._failure_offset.setDecimals(2)
+        self._failure_offset.setToolTip(
+            "偏移量越大，记录下限越低，覆盖范围越宽。\n"
+            "例：置信度设置 0.80，偏移量 0.10 → 记录区间 [0.70, 0.80)"
+        )
+        offset_row.addWidget(self._failure_offset)
+        offset_row.addStretch()
+        lo.addLayout(offset_row)
+
+        # 未勾选时置信度偏移不可修改（与段位检测联动逻辑一致）
+        self._failure_samples_cb.toggled.connect(
+            lambda on: self._failure_offset.setEnabled(on))
 
         # ---- 截图热键 ----
         self._hk_enabled = QCheckBox("启用截图热键（全局热键，游戏全屏时也可用）")
@@ -500,46 +610,8 @@ class ConfigDialog(_BaseFramelessDialog):
 
         lo.addWidget(g_hk)
 
-        # ---- 段位图标检测 ----
-        # 独立于主管线运行的段位图标识别功能设置
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)  # 水平分割线
-        lo.addWidget(sep)
-
-        lo.addWidget(QLabel("段位图标检测（独立线程）"))
-        self._rank_enabled_cb = QCheckBox("启用段位图标检测")
-        self._rank_enabled_cb.setToolTip(
-            "独立线程持续截图检测双方段位图标（新手~大师 + I~V），\n"
-            "检测到后写入 CSV 己方段位/对方段位列。"
-        )
-        self._rank_enabled_cb.toggled.connect(self._on_rank_enabled_toggled)
-        lo.addWidget(self._rank_enabled_cb)
-
-        # 截图间隔：段位图标只在硬币阶段短暂显示（~2秒），需要较快的检测频率
-        rk_row1 = QHBoxLayout()
-        rk_row1.addWidget(QLabel("截图间隔:"))
-        self._rank_interval = QDoubleSpinBox()
-        self._rank_interval.setRange(0.2, 2.0)      # 最快 0.2s，最慢 2s
-        self._rank_interval.setSingleStep(0.1)
-        self._rank_interval.setSuffix(" 秒")
-        self._rank_interval.setToolTip("段位图标仅在硬币阶段显示约 2 秒，间隔越短越不容易错过。")
-        rk_row1.addWidget(self._rank_interval)
-        rk_row1.addStretch()
-        lo.addLayout(rk_row1)
-
-        # NCC 匹配置信度阈值：越高误检越少，但可能漏掉模糊的图标
-        rk_row2 = QHBoxLayout()
-        rk_row2.addWidget(QLabel("置信度阈值:"))
-        self._rank_threshold = QDoubleSpinBox()
-        self._rank_threshold.setRange(0.5, 0.95)     # 太低误检多，太高漏检多
-        self._rank_threshold.setSingleStep(0.05)
-        self._rank_threshold.setToolTip("模板匹配置信度阈值。推荐 0.7。太高可能漏检，太低可能误检。")
-        rk_row2.addWidget(self._rank_threshold)
-        rk_row2.addStretch()
-        lo.addLayout(rk_row2)
-
         lo.addStretch()
-        return w
+        return scroll
 
     # =========================================================================
     # Tab 2: 系统
@@ -658,7 +730,6 @@ class ConfigDialog(_BaseFramelessDialog):
             "Qt 从第一个开始尝试，如果系统没装就试下一个，直到找到可用的。\n"
             "因此同一个主题在 Windows 和 macOS 上可能显示不同字体——这是正常行为。"
         )
-        from PySide6.QtWidgets import QScrollArea
         fl = QVBoxLayout(g_font)
         scroll = QScrollArea()
         scroll.setMaximumHeight(100)
@@ -1130,6 +1201,9 @@ class ConfigDialog(_BaseFramelessDialog):
         # 根据日志模式的初始状态设置子复选框的启用/禁用
         self._on_log_mode_toggled(dbg.get("log_mode", False))
         self._show_confidence_cb.setChecked(dbg.get("show_confidence", False))
+        self._failure_samples_cb.setChecked(dbg.get("save_failure_samples", False))
+        self._failure_offset.setValue(dbg.get("failure_sample_offset", 0.10))
+        self._failure_offset.setEnabled(dbg.get("save_failure_samples", False))
 
         # ---- 通知与托盘 ----
         n = c.get("notification", {})
@@ -1310,6 +1384,8 @@ class ConfigDialog(_BaseFramelessDialog):
                 "log_mode": self._log_mode_cb.isChecked(),
                 "log_scope": self._get_log_scope(),
                 "show_confidence": self._show_confidence_cb.isChecked(),
+                "save_failure_samples": self._failure_samples_cb.isChecked(),
+                "failure_sample_offset": round(self._failure_offset.value(), 2),
             },
             "appearance": {
                 "theme": self._theme_combo.currentText(),
@@ -1429,6 +1505,10 @@ class ConfigDialog(_BaseFramelessDialog):
             '日志记录范围："status"=状态栏消息, "screenshots"=截图事件, "errors"=错误信息')
         _kv("show_confidence", dbg.get("show_confidence", False),
             "状态栏显示检测置信度（段位图标 NCC、等级判读、三阶段检测分数）")
+        _kv("save_failure_samples", dbg.get("save_failure_samples", False),
+            "保存最佳失败样本（置信度处于 [设置值−偏移量, 设置值) 时记录）")
+        _kv("failure_sample_offset", dbg.get("failure_sample_offset", 0.10),
+            "置信度偏移量（设置值 − offset = 记录下限）")
 
         lines.extend(["", "[window]"])
         _kv("width", w.get("width", 1300), "主窗口宽度（像素）")
@@ -1673,4 +1753,17 @@ class ConfigDialog(_BaseFramelessDialog):
         log_dir = get_project_root() / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
         subprocess.Popen(["explorer", os.fspath(log_dir)])
+
+    @staticmethod
+    def _open_debug_dir() -> None:
+        """在文件资源管理器中打开失败样本文件夹。
+
+        如果 debug 文件夹不存在（从未触发过失败样本保存），
+        先创建空文件夹再打开，避免 explorer 报错"路径不存在"。
+        """
+        import os
+        import subprocess
+        debug_dir = get_project_root() / "screenshots" / "debug"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        subprocess.Popen(["explorer", os.fspath(debug_dir)])
 
