@@ -432,6 +432,7 @@ class FailureSampleManager:
         ]
 
         # 分组输出，组间空行分隔
+        # 每组只在至少有一个非空字段时才显示
         _GROUPS: list[tuple[str, list[str]]] = [
             ("识别结果", ["target", "confidence", "threshold", "record_threshold",
                           "matched_template"]),
@@ -444,10 +445,16 @@ class FailureSampleManager:
             written = False
             for key in keys:
                 if key in meta:
+                    val = meta[key]
+                    # 跳过空值（仅当值为非空字符串/非空列表/非零数值时才显示）
+                    if isinstance(val, str) and not val:
+                        continue
+                    if isinstance(val, list) and not val:
+                        continue
+
                     if not written:
                         lines.append(f"# ---- {group_name} ----")
                         written = True
-                    val = meta[key]
                     comment = _COMMENTS.get(key, "")
                     if isinstance(val, bool):
                         lines.append(f"{key} = {str(val).lower()}  # {comment}")
