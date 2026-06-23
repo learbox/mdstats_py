@@ -1059,7 +1059,7 @@ class MainWindow(QMainWindow):
         finished 信号自动清理 worker 引用，避免 QThread 被 GC 时仍在运行。
         """
         from src.stats_worker import StatsWorker
-        from src.rank_detector import RankDetector
+        from src.rank_worker import RankDetector
         from src.failure_sample_manager import FailureSampleManager
 
         # 创建失败样本管理器（两个线程共用同一实例）
