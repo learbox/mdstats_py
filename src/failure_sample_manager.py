@@ -186,7 +186,7 @@ class FailureSampleManager:
                     self._safe_unlink(old_stem + ".toml")
                     del self._best[target]
                     _log.write("SCRN",
-                               f"已删除失败样本: {target} ({confidence:.2f}>={threshold:.2f} 识别恢复)")
+                               f"已删除诊断截图: {target} ({confidence:.2f}>={threshold:.2f} 识别恢复)")
                 return
 
             # ═══════════════════════════════════════════════════════
@@ -238,10 +238,10 @@ class FailureSampleManager:
             if old_cache_stem or old_disk_stem:
                 prev = f"{old_conf:.2f}" if old_conf is not None else "?"
                 _log.write("SCRN",
-                           f"已更新失败样本: {target} ({prev}→{confidence:.2f})")
+                           f"已更新诊断截图: {target} ({prev}→{confidence:.2f})")
             else:
                 _log.write("SCRN",
-                           f"已保存失败样本: {target} ({confidence:.2f}/{threshold:.2f})")
+                           f"已保存诊断截图: {target} ({confidence:.2f}/{threshold:.2f})")
 
     def clear_cache(self) -> None:
         """一轮结束时调用。清空内存缓存，磁盘文件不动。
@@ -404,7 +404,7 @@ class FailureSampleManager:
             "target":           "识别项名称",
             "confidence":       "本次匹配置信度 (0~1)",
             "threshold":        "识别成功阈值 (>= 此值视为成功)",
-            "record_threshold": "失败样本记录下限 (threshold − offset)",
+            "record_threshold": "记录下限 (阈值 − 偏移量)，匹配度低于此值不记录",
             "matched_template": "最佳匹配的模板文件路径",
             "roi_name":         "ROI 配置段名",
             "roi":              "本次使用的 ROI 坐标 [x, y, w, h]",
