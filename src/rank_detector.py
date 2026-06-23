@@ -220,7 +220,7 @@ class RankDetector(QThread):
                     tier_val = result.get(f"{side}_tier")
                     tier_score = float(result.get(f"{side}_tier_score", 0.0))
 
-                    # 组装 extra_meta：包含该侧所有图标候选的匹配分 + 等级信息
+                    # 段位图标不用 ROI 系统（用位置缓存），不传 roi 字段
                     extra: dict = {
                         "all_scores": _det.get_rank_icon_all_scores(side),
                     }
