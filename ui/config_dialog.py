@@ -411,7 +411,7 @@ class ConfigDialog(_BaseFramelessDialog):
 
         布局分为两个分组：
             功能设置 — 三阶段检测 + 段位检测（日常使用需调整的参数）
-            调试设置 — 保存截图、热键、最佳失败样本（排查问题时才需要）
+            调试设置 — 保存截图、热键、诊断截图（排查问题时才需要）
         """
         # 内容较多，包裹在可滚动的区域中
         w = QWidget()
@@ -450,12 +450,12 @@ class ConfigDialog(_BaseFramelessDialog):
         lo.addLayout(r)
 
         r2 = QHBoxLayout()
-        r2.addWidget(QLabel("匹配阈值:"))
+        r2.addWidget(QLabel("匹配置信度:"))
         self._threshold = QDoubleSpinBox()
         self._threshold.setRange(0.0, 1.0)
         self._threshold.setSingleStep(0.05)
         self._threshold.setDecimals(2)
-        self._threshold.setToolTip("模板匹配置信度阈值 (0~1)。\n"
+        self._threshold.setToolTip("模板匹配置信度 (0~1)。\n"
                                     "0.80 = 匹配度需达 80% 才判定识别成功。\n"
                                     "太高 → 可能频繁漏掉本该识别到的画面。\n"
                                     "太低 → 可能把无关画面误判为匹配。\n"
@@ -494,11 +494,13 @@ class ConfigDialog(_BaseFramelessDialog):
         lo.addLayout(rk_row1)
 
         rk_row2 = QHBoxLayout()
-        rk_row2.addWidget(QLabel("置信度阈值:"))
+        rk_row2.addWidget(QLabel("匹配置信度:"))
         self._rank_threshold = QDoubleSpinBox()
         self._rank_threshold.setRange(0.5, 0.95)
         self._rank_threshold.setSingleStep(0.05)
-        self._rank_threshold.setToolTip("模板匹配置信度阈值。推荐 0.7。太高可能漏检，太低可能误检。")
+        self._rank_threshold.setToolTip("段位图标匹配置信度 (0~1)。\n"
+                                         "0.70 = 匹配度需达 70% 才判定识别成功。\n"
+                                         "推荐 0.70。太高可能漏检，太低可能误检。")
         rk_row2.addWidget(self._rank_threshold)
         rk_row2.addStretch()
         lo.addLayout(rk_row2)
@@ -541,19 +543,18 @@ class ConfigDialog(_BaseFramelessDialog):
         self._save_screenshots_cb.toggled.connect(
             lambda on: self._set_sub_disabled(self._auto_clear_cb, not on))
 
-        # ---- 保存最佳失败样本 ----
+        # ---- 保存接近成功的截图 ----
         fail_row = QHBoxLayout()
-        self._failure_samples_cb = QCheckBox("保存最佳失败样本")
+        self._failure_samples_cb = QCheckBox("保存接近成功的截图")
         self._failure_samples_cb.setToolTip(
-            "当识别置信度处于 [设置值−偏移量, 设置值) 区间时，\n"
-            "自动保留该阶段内最佳失败样本到 screenshots/debug/，\n"
-            "用于问题排查和模板更新。"
+            "识别接近成功但未达阈值时，自动保存截图到 screenshots/debug/。\n"
+            "用于排查识别问题（字体变化、模板失效等），问题解决后关闭即可。"
         )
         fail_row.addWidget(self._failure_samples_cb)
-        self._btn_view_debug = QPushButton("查看样本")
+        self._btn_view_debug = QPushButton("查看截图")
         self._btn_view_debug.setFixedWidth(88)
         self._btn_view_debug.clicked.connect(self._open_debug_dir)
-        self._btn_view_debug.setToolTip("在文件资源管理器中打开失败样本文件夹。")
+        self._btn_view_debug.setToolTip("在文件资源管理器中打开诊断截图文件夹。")
         fail_row.addWidget(self._btn_view_debug)
         fail_row.addStretch()
         lo.addLayout(fail_row)
@@ -566,8 +567,8 @@ class ConfigDialog(_BaseFramelessDialog):
         self._failure_offset.setSingleStep(0.01)
         self._failure_offset.setDecimals(2)
         self._failure_offset.setToolTip(
-            "偏移量越大，记录下限越低，覆盖范围越宽。\n"
-            "例：置信度设置 0.80，偏移量 0.10 → 记录区间 [0.70, 0.80)"
+            "偏移量越大，越容易触发保存。\n"
+            "例：置信度 0.80，偏移量 0.10 → 匹配度达到 0.70 以上即截图"
         )
         offset_row.addWidget(self._failure_offset)
         offset_row.addStretch()
@@ -1506,9 +1507,9 @@ class ConfigDialog(_BaseFramelessDialog):
         _kv("show_confidence", dbg.get("show_confidence", False),
             "状态栏显示检测置信度（段位图标 NCC、等级判读、三阶段检测分数）")
         _kv("save_failure_samples", dbg.get("save_failure_samples", False),
-            "保存最佳失败样本（置信度处于 [设置值−偏移量, 设置值) 时记录）")
+            "保存接近成功的截图（匹配度接近阈值但未达标时自动截图）")
         _kv("failure_sample_offset", dbg.get("failure_sample_offset", 0.10),
-            "置信度偏移量（设置值 − offset = 记录下限）")
+            "偏移量（值越大越容易触发，0 = 仅保存未达标的最高分）")
 
         lines.extend(["", "[window]"])
         _kv("width", w.get("width", 1300), "主窗口宽度（像素）")
@@ -1756,10 +1757,9 @@ class ConfigDialog(_BaseFramelessDialog):
 
     @staticmethod
     def _open_debug_dir() -> None:
-        """在文件资源管理器中打开失败样本文件夹。
+        """在文件资源管理器中打开诊断截图文件夹。
 
-        如果 debug 文件夹不存在（从未触发过失败样本保存），
-        先创建空文件夹再打开，避免 explorer 报错"路径不存在"。
+        如果 debug 文件夹不存在，先创建再打开。
         """
         import os
         import subprocess
