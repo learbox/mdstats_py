@@ -295,25 +295,52 @@ def _detect_with_roi(
     这些变量由对应的 getter 函数读取，调用方应在检测后立即调用 getter
     （因为下一次 detect_* 调用会覆盖它们）。
     """
-    roi = _get_roi(roi_section)
-    search_area = screenshot[roi[1]:roi[1] + roi[3], roi[0]:roi[0] + roi[2]] if roi else screenshot
+    has_preset = _get_roi(roi_section) is not None
+    if has_preset:
+        roi = _get_roi(roi_section)
+        search_area = screenshot[roi[1]:roi[1] + roi[3], roi[0]:roi[0] + roi[2]]
+        ox, oy = roi[0], roi[1]
+    else:
+        roi = None
+        search_area = screenshot
+        ox, oy = 0, 0
+
     best_key, best_score = "", 0.0
+    best_x = best_y = 0
     all_scores: dict[str, float] = {}
     for key in templates:
-        score = match_template(search_area, key)
+        result = match_template(search_area, key, get_pos=True)
+        if isinstance(result, tuple):
+            score, mx, my = result
+        else:
+            score, mx, my = result, 0, 0
         all_scores[key] = score
         if score > best_score:
             best_score, best_key = score, key
+            best_x, best_y = ox + mx, oy + my
+
     global _last_match_score, _last_all_scores, _last_matched_template, _last_roi_info
     _last_match_score = best_score
     _last_all_scores = all_scores
-    _last_matched_template = best_key  # 无论是否达标都记录（失败样本需要知道最接近哪个模板）
+    _last_matched_template = best_key
     _last_roi_info = {
         "roi_name": roi_section,
         "roi": list(roi) if roi else [0, 0, screenshot.shape[1], screenshot.shape[0]],
-        "roi_source": "preset" if roi else "fullscreen",
+        "roi_source": "preset" if has_preset else "fullscreen",
     }
+
     if best_score >= threshold:
+        # 全图搜索首次成功 → 自动保存 ROI，下次直接用（和 rank 段逻辑一致）
+        if not has_preset and best_key:
+            tpl = _get_cached_template(best_key)
+            if tpl is not None:
+                th, tw = tpl.shape[:2]
+                MARGIN = 50
+                rx = max(0, best_x - MARGIN)
+                ry = max(0, best_y - MARGIN)
+                rw = min(tw + MARGIN * 2, screenshot.shape[1] - rx)
+                rh = min(th + MARGIN * 2, screenshot.shape[0] - ry)
+                _save_roi(roi_section, rx, ry, rw, rh)
         return result_map.get(best_key)
     return None
 
