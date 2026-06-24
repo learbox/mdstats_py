@@ -31,7 +31,7 @@ log_scope = ["status", "screenshots", "errors"]
 show_confidence = false
 # 识别失败时诊断截图（匹配度接近阈值但未达标时自动截图 + 诊断数据）
 save_failure_samples = false
-# 偏移量（值越大越容易触发，0 = 仅保存未达标帧的最高分）
+# 偏移量（值越大越容易触发，0 = 仅保存未达标的最高分）
 failure_sample_offset = 0.2
 
 [window]
@@ -79,8 +79,6 @@ enabled = true
 duration = 1
 # 最小化时隐藏到系统托盘（而非任务栏）
 minimize_to_tray = false
-# OBS 捕获模式（悬浮窗显示任务栏图标以允许 OBS 捕获）
-obs_mode = false
 
 # 段位图标检测
 [rank_detection]

@@ -460,7 +460,13 @@ class FloatingWindow(QWidget):
             return
 
         user32 = ctypes.windll.user32
-        user32.SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, self._owner_hwnd)
+        # 设置错误模式：SetWindowLongPtr 返回 0 可能是正常值也可能是错误
+        from ctypes import get_last_error
+        ctypes.windll.kernel32.SetLastError(0)  # 先清零
+        old = user32.SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, self._owner_hwnd)
+        if old == 0 and get_last_error() != 0:
+            import sys
+            print(f"[float] SetWindowLongPtr 失败 err={get_last_error()}", file=sys.stderr, flush=True)
 
     def _apply_owner(self, owner_hwnd: int) -> None:
         """记录 Owner 窗口句柄，等待 showEvent 后生效。
