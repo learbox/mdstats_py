@@ -1353,20 +1353,35 @@ class MainWindow(QMainWindow):
             self._float_window.set_running(True)
 
     def _on_stop(self) -> None:
-        """点击"停止"按钮: 停止后台识别线程并恢复 UI。
+        """点击"停止"按钮: 停止后台识别线程并恢复 UI。"""
+        import time, sys
+        from PySide6.QtCore import QThread
 
-        先同时发停止信号（两个线程并发退出），再等待。
-        _sleep 每 50ms 检查 _running，截图后也有检查点，通常 0.1s 内退出。
-        """
+        t0 = time.time()
         if self._worker is not None:
             self._worker.stop()
         if self._rank_worker is not None:
             self._rank_worker.stop()
+        t1 = time.time()
 
+        # 轮询等待，每 50ms 检查 → 退出时间精确到 50ms
         if self._worker is not None:
-            self._worker.wait(1500)
+            for _ in range(60):  # 最多等 3s
+                if not self._worker.isRunning():
+                    break
+                QThread.msleep(50)
+        t2 = time.time()
+
         if self._rank_worker is not None:
-            self._rank_worker.wait(1500)
+            for _ in range(60):
+                if not self._rank_worker.isRunning():
+                    break
+                QThread.msleep(50)
+        t3 = time.time()
+
+        print(f"[perf] stop={t1-t0:.3f}s wait_worker={t2-t1:.3f}s "
+              f"wait_rank={t3-t2:.3f}s 总计={t3-t0:.3f}s",
+              file=sys.stderr, flush=True)
 
         self._snapshot_ctrl.unregister_hotkeys()
         self._reset_stage()                      # 重置状态机
