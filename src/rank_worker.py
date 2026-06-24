@@ -213,6 +213,10 @@ class RankWorker(QThread):
             except (cv2.error, ValueError):
                 result = {}  # 检测异常时返回空结果，下一轮重试
 
+            # 检测后检查 stop（detect_rank_icon 的 NCC 模板匹配可能耗时数百 ms）
+            if not self._running:
+                return
+
             # ---- 失败样本记录：段位图标两项 ----
             # 和三阶段检测同理：每个 target 独立提交自己的置信度分数。
             # 段位图标比较特殊——除了图标 NCC 匹配分数外，
