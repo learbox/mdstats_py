@@ -283,5 +283,9 @@ class RankWorker(QThread):
                     # 首次检测到单方 → 增量进度（状态栏实时反馈）
                     self.partial_update.emit(dict(self._result))
 
+            # 信号处理完毕后检查 stop
+            if not self._running:
+                return
+
             # 等待指定间隔后进入下一轮截图
             self._sleep(int(self._interval * 1000))
