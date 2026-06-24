@@ -305,6 +305,46 @@ def match_template(
     return float(max_val)
 
 
+def _find_best_template(search: np.ndarray, keys: tuple[str, ...],
+                         ox: int = 0, oy: int = 0
+                         ) -> tuple[str, float, int, int, dict[str, float]]:
+    """在 search 区域中逐模板匹配，返回 (最佳模板名, 分数, x, y, 全部分数)。"""
+    best_key, best_score = "", 0.0
+    best_x = best_y = 0
+    all_scores: dict[str, float] = {}
+    for key in keys:
+        result = match_template(search, key, get_pos=True)
+        if isinstance(result, tuple):
+            score, mx, my = result
+        else:
+            score, mx, my = result, 0, 0
+        all_scores[key] = score
+        if score > best_score:
+            best_score, best_key = score, key
+            best_x, best_y = ox + mx, oy + my
+    return best_key, best_score, best_x, best_y, all_scores
+
+
+def _auto_save_roi(section: str, best_x: int, best_y: int,
+                   best_key: str, screenshot: np.ndarray) -> None:
+    """首次全图搜索成功时自动持久化 ROI（模板位置 ±50px 冗余）。
+
+    两处调用方（三阶段检测和段位检测）共用同一逻辑。
+    """
+    if section in _roi_cache:
+        return
+    tpl = _get_cached_template(best_key)
+    if tpl is None:
+        return
+    th, tw = tpl.shape[:2]
+    margin = 50
+    rx = max(0, best_x - margin)
+    ry = max(0, best_y - margin)
+    rw = min(tw + margin * 2, screenshot.shape[1] - rx)
+    rh = min(th + margin * 2, screenshot.shape[0] - ry)
+    _save_roi(section, rx, ry, rw, rh)
+
+
 def _detect_with_roi(
     screenshot: np.ndarray, roi_section: str, templates: tuple[str, ...],
     result_map: dict[str, str], threshold: float,
@@ -333,19 +373,8 @@ def _detect_with_roi(
         search_area = screenshot
         ox, oy = 0, 0
 
-    best_key, best_score = "", 0.0
-    best_x = best_y = 0
-    all_scores: dict[str, float] = {}
-    for key in templates:
-        result = match_template(search_area, key, get_pos=True)
-        if isinstance(result, tuple):
-            score, mx, my = result
-        else:
-            score, mx, my = result, 0, 0
-        all_scores[key] = score
-        if score > best_score:
-            best_score, best_key = score, key
-            best_x, best_y = ox + mx, oy + my
+    best_key, best_score, best_x, best_y, all_scores = \
+        _find_best_template(search_area, templates, ox, oy)
 
     global _last_match_score, _last_all_scores, _last_matched_template, _last_roi_info
     _last_match_score = best_score
@@ -358,17 +387,9 @@ def _detect_with_roi(
     }
 
     if best_score >= threshold:
-        # 全图搜索首次成功 → 自动保存 ROI，下次直接用（和 rank 段逻辑一致）
+        # 全图搜索首次成功 → 自动保存 ROI，下次直接用
         if not has_preset and best_key:
-            tpl = _get_cached_template(best_key)
-            if tpl is not None:
-                th, tw = tpl.shape[:2]
-                margin = 50
-                rx = max(0, best_x - margin)
-                ry = max(0, best_y - margin)
-                rw = min(tw + margin * 2, screenshot.shape[1] - rx)
-                rh = min(th + margin * 2, screenshot.shape[0] - ry)
-                _save_roi(roi_section, rx, ry, rw, rh)
+            _auto_save_roi(roi_section, best_x, best_y, best_key, screenshot)
         return result_map.get(best_key)
     return None
 
@@ -427,19 +448,8 @@ def detect_rank(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
     search = screenshot[roi[1]:roi[1] + roi[3], roi[0]:roi[0] + roi[2]] if roi else screenshot
     ox, oy = (roi[0], roi[1]) if roi else (0, 0)
 
-    best_key, best_score = "", 0.0
-    best_x = best_y = 0
-    all_scores: dict[str, float] = {}
-    for key in ("rank_up", "rank_down"):
-        result = match_template(search, key, get_pos=True)
-        if isinstance(result, tuple):
-            score, mx, my = result
-        else:
-            score, mx, my = result, 0, 0
-        all_scores[key] = score
-        if score > best_score:
-            best_score, best_key = score, key
-            best_x, best_y = ox + mx, oy + my
+    best_key, best_score, best_x, best_y, all_scores = \
+        _find_best_template(search, ("rank_up", "rank_down"), ox, oy)
 
     global _last_match_score, _last_all_scores, _last_matched_template, _last_roi_info
     _last_match_score = best_score
@@ -453,16 +463,7 @@ def detect_rank(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
 
     if best_score >= threshold and best_key:
         # 首次检测到时自动持久化 rank ROI（模板位置 ±50px 冗余）
-        if "rank" not in _roi_cache:
-            tpl = _get_cached_template(best_key)
-            if tpl is not None:
-                th, tw = tpl.shape[:2]
-                margin = 50
-                rx = max(0, best_x - margin)
-                ry = max(0, best_y - margin)
-                rw = min(tw + margin * 2, screenshot.shape[1] - rx)
-                rh = min(th + margin * 2, screenshot.shape[0] - ry)
-                _save_roi("rank", rx, ry, rw, rh)
+        _auto_save_roi("rank", best_x, best_y, best_key, screenshot)
         return "up" if best_key == "rank_up" else "down"
     return None
 
