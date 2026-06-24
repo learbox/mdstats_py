@@ -223,18 +223,11 @@ class StatsWorker(QThread):
 
     def _sleep(self, ms: int) -> None:
         """可中断休眠：每 50ms 醒一次检查 _running，stop() 后最多 50ms 退出。"""
-        import time, sys
         remaining = ms
         while remaining > 0 and self._running:
             chunk = min(remaining, 50)
-            t0 = time.time()
             self.msleep(chunk)
-            dt = time.time() - t0
-            if dt > 0.1:
-                print(f"[perf] StatsWorker msleep({chunk}) 实际睡了 {dt:.3f}s", file=sys.stderr, flush=True)
             remaining -= chunk
-        if not self._running:
-            print(f"[perf] StatsWorker 检测到 stop，剩余 {remaining}ms 未睡完", file=sys.stderr, flush=True)
 
     def _skip(self) -> None:
         """休眠 interval 秒。"""
@@ -595,6 +588,10 @@ class StatsWorker(QThread):
                 self.status_update.emit(f"截图失败: {e}")
                 self._skip()
                 continue
+
+            # 截图后立即检查 stop（mss 截图在部分系统需数百 ms）
+            if not self._running:
+                return
 
             # [3] 状态机：根据当前阶段执行对应识别
             #
