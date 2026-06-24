@@ -221,16 +221,17 @@ class StatsWorker(QThread):
     # 内部辅助方法
     # =========================================================================
 
+    def _sleep(self, ms: int) -> None:
+        """可中断休眠：每 50ms 醒一次检查 _running，stop() 后最多 50ms 退出。"""
+        remaining = ms
+        while remaining > 0 and self._running:
+            chunk = min(remaining, 50)
+            self.msleep(chunk)
+            remaining -= chunk
+
     def _skip(self) -> None:
-        """休眠 interval 秒。
-
-        QThread.msleep() 是线程安全的休眠函数，只休眠当前线程，
-        不会阻塞主线程的 Qt 事件循环。如果直接用 time.sleep() 也一样，
-        但 msleep() 是 Qt 的惯例写法。
-
-        休眠时间 = interval（秒）× 1000（转毫秒）。
-        """
-        self.msleep(int(self._interval * 1000))
+        """休眠 interval 秒。"""
+        self._sleep(int(self._interval * 1000))
 
     def _consider_best(
         self, pairs: list[tuple[str, str]], all_scores: dict[str, float],

@@ -129,11 +129,19 @@ class RankWorker(QThread):
         if self._failure_mgr is not None:
             self._failure_mgr.clear_cache()
 
+    def _sleep(self, ms: int) -> None:
+        """可中断休眠：每 50ms 醒一次检查 _running，stop() 后最多 50ms 退出。"""
+        remaining = ms
+        while remaining > 0 and self._running:
+            chunk = min(remaining, 50)
+            self._sleep(chunk)
+            remaining -= chunk
+
     def stop(self) -> None:
         """优雅停止线程。不强制 kill，只把 _running 设为 False。
 
         工作线程在下一轮循环的开头检查 _running，发现 False 就退出 run()。
-        msleep 保证最多等待一轮间隔时间（默认 0.5 秒）。
+        _sleep 代替 msleep，stop() 后最多 50ms 退出。
         """
         self._running = False
 
@@ -161,7 +169,7 @@ class RankWorker(QThread):
         while self._running:
             # ---- 暂停检查 ----
             if self._paused:
-                self.msleep(200)  # 暂停时每 200ms 检查一次是否恢复
+                self._sleep(200)  # 暂停时每 200ms 检查一次是否恢复
                 continue
 
             # ---- 窗口状态检查 ----
@@ -171,18 +179,18 @@ class RankWorker(QThread):
                 break
             # 窗口最小化时跳过截图（截图会截到桌面或其他窗口）
             if _cap.is_window_minimized("masterduel"):
-                self.msleep(int(self._interval * 1000))
+                self._sleep(int(self._interval * 1000))
                 continue
 
             # ---- 截图 ----
             try:
                 screenshot = _cap.capture_window("masterduel")
             except OSError:
-                self.msleep(int(self._interval * 1000))
+                self._sleep(int(self._interval * 1000))
                 continue
 
             if screenshot is None:  # 截图失败（如窗口被遮挡）
-                self.msleep(int(self._interval * 1000))
+                self._sleep(int(self._interval * 1000))
                 continue
 
             # ---- 跳过已检测到的侧 ----
@@ -268,4 +276,4 @@ class RankWorker(QThread):
                     self.partial_update.emit(dict(self._result))
 
             # 等待指定间隔后进入下一轮截图
-            self.msleep(int(self._interval * 1000))
+            self._sleep(int(self._interval * 1000))
