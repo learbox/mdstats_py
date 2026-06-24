@@ -1811,6 +1811,7 @@ class MainWindow(QMainWindow):
         self._stats_table.setColumnCount(len(columns))
         self._stats_table.setHorizontalHeaderLabels(columns)
 
+        self._stats_table.setUpdatesEnabled(False)  # 暂停重绘
         self._stats_table.setRowCount(len(stats))
         for row_idx, row_data in enumerate(stats):
             for col_idx, col_name in enumerate(columns):
@@ -1826,6 +1827,7 @@ class MainWindow(QMainWindow):
 
                 self._stats_table.setItem(row_idx, col_idx, item)
 
+        self._stats_table.setUpdatesEnabled(True)   # 恢复重绘
         self._refresh_float_window()         # 悬浮窗也更新
 
     def _refresh_record_table(self) -> None:
@@ -1837,6 +1839,7 @@ class MainWindow(QMainWindow):
         刷新后自动滚动到顶部（最新记录）。
         """
         self._suppress_cell_changed = True   # 抑制 cellChanged → 防止误写 CSV
+        self._record_table.setUpdatesEnabled(False)  # 暂停重绘，批量填充完再刷新
 
         records = load_records()
         self._record_table.setRowCount(len(records))
@@ -1855,6 +1858,7 @@ class MainWindow(QMainWindow):
         if records:
             self._record_table.scrollToTop() # 滚动到最新记录
 
+        self._record_table.setUpdatesEnabled(True)   # 恢复重绘，一次性刷新
         self._suppress_cell_changed = False
 
     def _on_record_cell_changed(self, row: int, col: int) -> None:
