@@ -983,7 +983,7 @@ class ConfigDialog(_BaseFramelessDialog):
     # =========================================================================
 
     def _make_float_tab(self) -> QWidget:
-        """创建"悬浮窗"标签页：尺寸、颜色、透明度、字体、行选择、OBS模式。"""
+        """创建"悬浮窗"标签页：尺寸、颜色、透明度、字体、行选择。"""
         w = QWidget()
         lo = QVBoxLayout(w)
         lo.setSpacing(8)
@@ -1060,12 +1060,6 @@ class ConfigDialog(_BaseFramelessDialog):
             "图片不存在时自动回退到下方设置的纯色。"
         )
         lo.addWidget(self._use_theme_bg)
-
-        # ---- OBS 捕获模式（已废弃） ----
-        # v1.10+ 用 SetWindowLongPtr 隐藏 Owner 方案替代，
-        # 无需用户手动切换，OBS 窗口捕获 + 无任务栏图标同时满足。
-        # 保留 _obs_mode_cb 属性为空，避免 load/save 报错。
-        self._obs_mode_cb = None
 
         # ---- 底部状态栏 ----
         self._show_status_cb = QCheckBox("底部显示检测状态")
@@ -1209,7 +1203,6 @@ class ConfigDialog(_BaseFramelessDialog):
         self._notify_cb.setChecked(n.get("enabled", False))
         self._notify_duration.setValue(n.get("duration", 5))
         self._tray_minimize_cb.setChecked(n.get("minimize_to_tray", False))
-        # obs_mode 已废弃（v1.10+），不再回显
 
         # ---- 段位检测 ----
         rk = c.get("rank_detection", {})

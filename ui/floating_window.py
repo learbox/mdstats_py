@@ -109,7 +109,7 @@ class FloatingWindow(QWidget):
         """初始化悬浮窗。
 
         创建两列网格布局，左列为行名、右列为数值。
-        窗口类型根据 obs_mode 配置决定（Tool 或 Window）。
+        窗口类型固定为 Qt.Window（OBS 可捕获），任务栏图标通过隐藏 Owner 隐藏。
         初始尺寸根据行数和默认字号计算。
 
         Args:
@@ -130,8 +130,7 @@ class FloatingWindow(QWidget):
         self._rows: tuple[str, ...] = tuple(rows) if rows else _DEFAULT_ROWS
 
         # 始终使用 Qt.Window（OBS 窗口捕获可识别）。
-        # 任务栏图标通过 Win32 SetWindowLongPtr(GWLP_HWNDPARENT) 隐藏，
-        # 不再需要 obs_mode 切换。见 _apply_owner() 方法。
+        # 任务栏图标通过 Win32 Owner 机制隐藏，见 _apply_owner() 方法。
         self.setWindowFlags(
             Qt.WindowType.Window
             | Qt.WindowType.FramelessWindowHint
