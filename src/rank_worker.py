@@ -27,6 +27,9 @@
 """
 
 
+from __future__ import annotations
+from typing import Any
+
 import cv2
 from PySide6.QtCore import QThread, Signal
 
@@ -228,16 +231,15 @@ class RankWorker(QThread):
                 for side, target in [("player", "my_rank_icon"),
                                      ("opponent", "opponent_rank_icon")]:
                     # 该侧的段位图标 NCC 匹配分数
-                    side_score = float(result.get(f"{side}_score", 0.0))
-                    rank_label = result.get(f"{side}_rank")
+                    side_score = float(result.get(f"{side}_score", 0.0) or 0.0)
                     # 原始图标文件名（如 "img_rankicon_04"，用于拼接完整路径）
                     icon_name = result.get(f"{side}_icon")
                     # 等级数字识别结果（I~V，巅峰没有）
                     tier_val = result.get(f"{side}_tier")
-                    tier_score = float(result.get(f"{side}_tier_score", 0.0))
+                    tier_score = float(result.get(f"{side}_tier_score", 0.0) or 0.0)
 
                     # 段位图标不用 ROI 系统（用位置缓存），不传 roi 字段
-                    extra: dict = {
+                    extra: dict[str, Any] = {
                         "all_scores": _det.get_rank_icon_all_scores(side),
                     }
                     if icon_name:
