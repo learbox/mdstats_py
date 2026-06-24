@@ -453,7 +453,7 @@ class FloatingWindow(QWidget):
         用 QTimer.singleShot 延迟执行，确保 Qt 已完成窗口创建。
         """
         import ctypes
-        GWLP_HWNDPARENT = -8
+        gwl_hwndparent = -8
 
         hwnd = int(self.winId())
         if hwnd == 0 or self._owner_hwnd == 0:
@@ -463,7 +463,7 @@ class FloatingWindow(QWidget):
         # 设置错误模式：SetWindowLongPtr 返回 0 可能是正常值也可能是错误
         from ctypes import get_last_error
         ctypes.windll.kernel32.SetLastError(0)  # 先清零
-        old = user32.SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, self._owner_hwnd)
+        old = user32.SetWindowLongPtrW(hwnd, gwl_hwndparent, self._owner_hwnd)
         if old == 0 and get_last_error() != 0:
             import sys
             print(f"[float] SetWindowLongPtr 失败 err={get_last_error()}", file=sys.stderr, flush=True)
