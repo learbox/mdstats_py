@@ -1353,24 +1353,20 @@ class MainWindow(QMainWindow):
             self._float_window.set_running(True)
 
     def _on_stop(self) -> None:
-        """点击"停止"按钮: 停止后台识别线程并恢复 UI。"""
-        import time
+        """点击"停止"按钮: 停止后台识别线程并恢复 UI。
 
-        t0 = time.time()
+        先同时发停止信号（两个线程并发退出），再等待。
+        _sleep 每 50ms 检查 _running，截图后也有检查点，通常 0.1s 内退出。
+        """
         if self._worker is not None:
             self._worker.stop()
         if self._rank_worker is not None:
             self._rank_worker.stop()
-        t_stop = time.time()
 
-        t_wait1 = time.time()
         if self._worker is not None:
             self._worker.wait(1500)
-        t_wait2 = time.time()
-
         if self._rank_worker is not None:
             self._rank_worker.wait(1500)
-        t_wait3 = time.time()
 
         import sys
         print(f"[perf] stop信号={t_stop-t0:.3f}s "
