@@ -1962,8 +1962,8 @@ class MainWindow(QMainWindow):
 
         from PySide6.QtWidgets import QWidget
         owner = QWidget()
-        # Tool 类型：没有自己的任务栏按钮
-        owner.setWindowFlags(Qt.WindowType.Tool)
+        # Tool + 无边框：没有任务栏按钮，也没有标题栏拖累尺寸
+        owner.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint)
         owner.setFixedSize(1, 1)
         # 透明：WA_TranslucentBackground + 确保 paint 什么都不画
         owner.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
