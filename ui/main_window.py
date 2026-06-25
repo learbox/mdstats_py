@@ -854,12 +854,12 @@ class MainWindow(QMainWindow):
         self._cols_restored: bool = False     # 列宽是否已从持久化文件恢复
 
         # ---- 5. 加载主题 ----
-        theme: Theme = load_theme(
-            self._config.get("appearance", {}).get("theme", "dark")
-        )
+        theme_name = self._config.get("appearance", {}).get("theme", "dark")
+        theme: Theme = load_theme(theme_name)
         self._tm.colors = theme.colors
         self._tm.titlebar_cfg = theme.titlebar
         self._tm.assets_dir = theme.assets_dir
+        self._tm._theme_name = theme_name  # 缓存，_on_reload_config 用来跳过无变化的重载
         self.setStyleSheet(theme.qss)          # 应用全局 QSS
         self._tm.apply_app_palette()           # 应用全局 QPalette
         self._apply_theme_pixmaps(theme.pixmaps)
@@ -2286,9 +2286,9 @@ class MainWindow(QMainWindow):
         """重新加载 config.toml，包括主题、检测参数等所有配置。
 
         执行流程:
-            1. 记录旧主题名 → 重新加载配置 → 对比新旧主题名
-            2. 如果主题变了: 重新加载 QSS + QPalette + 表格背景 + 标题栏
-            3. 如果 Worker 正在运行: 停止后用新配置重启（如新的检测间隔）
+            1. 主题没变 → 跳过重载（省 1s+），只刷新非主题配置
+            2. 主题变了 → 重新加载 QSS + QPalette + 图片 + 标题栏
+            3. Worker 正在运行 → 停止后用新配置重启
             4. 更新状态栏和信息标签
         """
         self._config = load_config()                       # 重新读取 config.toml
@@ -2302,16 +2302,19 @@ class MainWindow(QMainWindow):
         init_active_csv_from_config()
         self._update_info_label()
 
-        # 重新加载主题文件（字体等可能已通过设置弹窗修改）
-        theme = load_theme(new_theme_name)
-        self._tm.colors = theme.colors
-        self._tm.titlebar_cfg = theme.titlebar
-        self._tm.assets_dir = theme.assets_dir
-        self.setStyleSheet(theme.qss)
-        self._tm.apply_app_palette()
-        self._apply_theme_pixmaps(theme.pixmaps)
-        self._apply_theme_to_widgets()
-
+        # 主题没变 → 跳过加载（马卡龙读 10 张 PNG 可能上百 ms）
+        old_theme_name = getattr(self._tm, '_theme_name', '')
+        if new_theme_name != old_theme_name:
+            self._tm._theme_name = new_theme_name
+            theme = load_theme(new_theme_name)
+            self._tm.colors = theme.colors
+            self._tm.titlebar_cfg = theme.titlebar
+            self._tm.assets_dir = theme.assets_dir
+            self.setStyleSheet(theme.qss)
+            self._tm.apply_app_palette()
+            self._apply_theme_pixmaps(theme.pixmaps)
+            self._apply_theme_to_widgets()
+    
         # 悬浮窗已打开 → 用新配置刷新外观和行
         if self._float_window is not None:
             new_cfg = self._config.get("floating_window", {})
@@ -2334,13 +2337,18 @@ class MainWindow(QMainWindow):
         worker_was_running = self._worker is not None
         if worker_was_running:
             self._worker.stop()
-            self._worker.wait(1000)
         if self._rank_worker is not None:
             self._rank_worker.stop()
-            self._rank_worker.wait(1000)
+
+        from PySide6.QtCore import QThread
+        for _ in range(60):  # 轮询等待，最多 3s
+            w_alive = self._worker is not None and self._worker.isRunning()
+            r_alive = self._rank_worker is not None and self._rank_worker.isRunning()
+            if not w_alive and not r_alive:
+                break
+            QThread.msleep(50)
         if worker_was_running:
             self._start_worker()
-
         self._show_status(
             "配置已重新载入" + (" 并重启识别" if worker_was_running else "")
         )

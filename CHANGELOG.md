@@ -1,5 +1,23 @@
 # 更新日志
 
+## v1.10.3 (2026-06-25)
+
+### 新功能
+- **悬浮窗右键「删除最后记录」**：右键菜单新增删除最后记录功能
+
+### 改进
+- **热键截图消息写日志**：热键截图的消息按内容区分 SCRN/STATUS 写入日志文件
+- **设置确认加速**：未换主题时跳过 `load_theme`（省 1s+）；worker 停止用轮询替代硬等
+- **悬浮窗描述更新**：README 补充右键菜单、状态记忆、OBS 兼容等完整功能描述
+
+### 修复
+- 热键截图消息之前不写日志，开启日志模式后也查不到截图记录
+- Python 最低版本文档从 3.11 修正为 3.12
+
+### 代码质量
+- `detector.py` 提取 `_find_best_template` / `_auto_save_roi`，消除重复代码
+- `roi_manager.py` / `rank_icons.py` / `rank_worker.py` / `failure_sample_manager.py` / `detector.py` / `floating_window.py` 修复多个 lint 警告
+
 ## v1.10.2 (2026-06-25)
 
 ### 改进
