@@ -105,6 +105,7 @@ class FloatingWindow(QWidget):
     show_main_requested = Signal()    # 右键 → "显示主窗口"
     quit_requested = Signal()         # 右键 → "退出程序"
     toggle_start_stop = Signal()      # 右键 → "启动" / "停止"
+    delete_last_requested = Signal()  # 右键 → "删除最后记录"
     # 三段手动按钮（stage 0/1/2 对应不同语义）
     manual_action = Signal(str)       # 参数: "win" / "lose" / "undo"
 
@@ -555,6 +556,8 @@ class FloatingWindow(QWidget):
         menu.addAction(start_stop_text).triggered.connect(self.toggle_start_stop.emit)
 
         # ---- 第 3 段：固定菜单项 ----
+        menu.addSeparator()
+        menu.addAction("删除最后记录").triggered.connect(self.delete_last_requested.emit)
         menu.addSeparator()
         menu.addAction("显示主窗口").triggered.connect(self.show_main_requested.emit)
         menu.addAction("退出程序").triggered.connect(self.quit_requested.emit)
