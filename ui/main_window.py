@@ -582,8 +582,11 @@ class MainWindow(QMainWindow):
             self._float_window.update_status(msg)
 
     def _on_screenshot_status(self, msg: str) -> None:
-        """截图热键的状态消息 → 写 SCRN 日志 + 更新状态栏。"""
-        _log.write("SCRN", msg)
+        """截图热键消息 → 按内容区分 SCRN / STATUS 写日志。"""
+        if "截图" in msg and ("已保存" in msg or "失败" in msg):
+            _log.write("SCRN", msg)
+        else:
+            _log.write("STATUS", msg)
         self._show_status(msg)
 
     def _ask_yes_no(self, title: str, text: str) -> bool:
