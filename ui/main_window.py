@@ -2037,6 +2037,7 @@ class MainWindow(QMainWindow):
         self._float_window.show_main_requested.connect(self._show_from_tray)
         self._float_window.quit_requested.connect(self._quit_app)
         self._float_window.toggle_start_stop.connect(self._on_float_toggle_start_stop)
+        self._float_window.delete_last_requested.connect(self._on_delete_last)
         self._float_window.manual_action.connect(self._on_float_manual_action)
         self._float_window.set_running(self._worker is not None)
         # 将悬浮窗挂到隐藏 Owner → 去掉任务栏图标
