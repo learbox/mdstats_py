@@ -570,10 +570,12 @@ class MainWindow(QMainWindow):
     # =========================================================================
 
     def _show_status(self, msg: str) -> None:
-        """更新状态栏消息（左下角的文字）+ 同步到悬浮窗状态行。
+        """更新状态栏消息（左下角的文字）+ 同步到悬浮窗状态行 + 写日志。
 
+        所有状态栏消息统一走这里，日志作用域为 STATUS。
         如果有暂存记录（CSV 文件被占用），自动在消息末尾追加警告。
         """
+        _log.write("STATUS", msg)
         pending = get_pending_count()
         if pending > 0:
             msg = f"{msg}  |  ⚠ 文件被占用，{pending} 条暂存"
@@ -1403,8 +1405,7 @@ class MainWindow(QMainWindow):
         特殊处理: 如果消息表明 Master Duel 已关闭（"程序已关闭"），
                   自动恢复按钮状态，用户可以点击"启动"重新开始。
         """
-        _log.write("STATUS", msg)
-        self._show_status(msg)
+        self._show_status(msg)  # _show_status 内部统一写 STATUS 日志
         if msg.startswith("程序已关闭"):
             self._btn_start.setEnabled(True)
             self._btn_stop.setEnabled(False)
