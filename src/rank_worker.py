@@ -28,7 +28,6 @@
 
 
 from __future__ import annotations
-from typing import Any
 
 import cv2
 from PySide6.QtCore import QThread, Signal
@@ -239,7 +238,7 @@ class RankWorker(QThread):
                     tier_score = float(result.get(f"{side}_tier_score", 0.0) or 0.0)
 
                     # 段位图标不用 ROI 系统（用位置缓存），不传 roi 字段
-                    extra: dict[str, Any] = {
+                    extra: dict = {
                         "all_scores": _det.get_rank_icon_all_scores(side),
                     }
                     if icon_name:

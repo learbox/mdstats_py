@@ -44,7 +44,6 @@
 
 import sys
 from pathlib import Path
-from typing import Any
 
 import tomllib
 
@@ -65,7 +64,7 @@ def _get_config_path() -> Path:
     return get_project_root() / "config.toml"
 
 
-def load_config() -> dict[str, Any]:
+def load_config() -> dict:
     """加载并解析 config.toml，返回嵌套字典。
 
     如果 config.toml 不存在，自动在当前目录生成一份默认配置文件，

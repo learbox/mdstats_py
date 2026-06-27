@@ -38,9 +38,8 @@ QBrush   — Qt 的"画刷"，用来填充区域。可以是纯色、渐变或�
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor, QPalette, QPixmap
@@ -87,9 +86,9 @@ class ThemeWidgets:
     title_bar: TitleBar
     status_frame: QFrame
     content: QWidget
-    refresh_stats_table: Callable[[], None]
-    refresh_record_table: Callable[[], None]
-    update_manual_buttons: Callable[[], None]
+    refresh_stats_table = field()
+    refresh_record_table = field()
+    update_manual_buttons = field()
 
 
 # =============================================================================
@@ -103,7 +102,7 @@ class ThemeManager:
     并提供一系列方法把这些配置实际应用到 Qt 控件上。
     """
 
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(self, config: dict) -> None:
         """初始化 ThemeManager。
 
         参数:
@@ -112,7 +111,7 @@ class ThemeManager:
         self._config = config                       # 程序配置（用于读取当前主题名等）
         self.colors: dict[str, str] = {}            # 当前主题的颜色表（key → #RRGGBB）
         self.pixmap_paths: dict[str, str] = {}      # 当前主题的图片路径（QSS选择器 → 文件路径）
-        self.titlebar_cfg: dict[str, Any] = {}      # 当前主题的标题栏配置
+        self.titlebar_cfg: dict = {}      # 当前主题的标题栏配置
         self.assets_dir: Path | None = None         # 当前主题的 assets 文件夹路径
 
     # =========================================================================

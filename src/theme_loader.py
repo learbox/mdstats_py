@@ -96,7 +96,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 from src.config import get_project_root
 
@@ -132,9 +131,9 @@ class Theme:
     """
     qss: str
     colors: dict[str, str]
-    titlebar: dict[str, Any]
+    titlebar: dict
     assets_dir: Path
-    pixmaps: dict[str, Any] = field(default_factory=dict)
+    pixmaps: dict = field(default_factory=dict)
 
 
 # =============================================================================
@@ -177,14 +176,14 @@ _BUILTIN_COLORS: dict[str, str] = {
     "combo_body_bg": "#ffffff", "combo_list_bg": "#ffffff",
 }
 
-_BUILTIN_TITLEBAR: dict[str, Any] = {
+_BUILTIN_TITLEBAR: dict = {
     "height": 36, "icon_size": 20,
     "text_color": "#2c3e50", "text_size": 12,
     "text_font": "", "text_shadow": "",
     "btn_hover_bg": "#d5e4f7", "btn_close_hover": "#e74c3c",
 }
 
-_BUILTIN_ASSETS: dict[str, Any] = {
+_BUILTIN_ASSETS: dict = {
     "font_family": _DEFAULT_FONT,  # 含 macOS/Windows 回退栈
     "font_size": 13,
     "header_font_size": 12, "row_header_font_size": 11,
@@ -322,10 +321,10 @@ def _build_theme(theme_dir: Path) -> Theme:
     # 注意 TOML 必须以二进制模式 ("rb") 打开。
     # =====================================================================
     toml_path = theme_dir / "theme.toml"
-    data: dict[str, Any] = {}
+    data: dict = {}
     if toml_path.exists():
         with open(toml_path, "rb") as f:
-            data = tomllib.load(f)  # type: ignore[assignment]
+            data = tomllib.load(f)
 
     colors_raw = data.get("colors")
     colors: dict[str, str] = (
@@ -333,12 +332,12 @@ def _build_theme(theme_dir: Path) -> Theme:
         else dict(_BUILTIN_COLORS)
     )
     titlebar_raw = data.get("titlebar")
-    titlebar: dict[str, Any] = (
+    titlebar: dict = (
         dict(titlebar_raw) if isinstance(titlebar_raw, dict) and titlebar_raw
         else dict(_BUILTIN_TITLEBAR)
     )
     assets_raw = data.get("assets")
-    assets_cfg: dict[str, Any] = (
+    assets_cfg: dict = (
         dict(assets_raw) if isinstance(assets_raw, dict) and assets_raw
         else dict(_BUILTIN_ASSETS)
     )
@@ -433,7 +432,7 @@ def _build_theme(theme_dir: Path) -> Theme:
         qss = qss.replace("{{color." + key + "}}", val)
 
     # 准备颜色+字体的合并字典（用于内置 QSS 的 % 格式化）
-    colors_with_font: dict[str, Any] = dict(colors)
+    colors_with_font: dict = dict(colors)
     colors_with_font["font_family"] = font_family
     colors_with_font["font_size"] = str(font_size)
 
@@ -459,7 +458,7 @@ def _fallback_theme() -> Theme:
 
     内置 QSS 使用 %(key)s 占位符，直接用 colors 字典做 % 格式化。
     """
-    colors: dict[str, Any] = dict(_BUILTIN_COLORS)
+    colors: dict = dict(_BUILTIN_COLORS)
     colors["font_family"] = _DEFAULT_FONT
     colors["font_size"] = "13"
     colors["header_font_size"] = "12"

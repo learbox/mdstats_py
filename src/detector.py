@@ -689,7 +689,7 @@ def _composite_rank_icon(name: str, w: int, h: int, bg_color: np.ndarray) -> np.
     alpha_f = scaled_alpha.astype(np.float32) / 255.0
     fg = np.asarray(scaled_bgr, dtype=np.float32)
     bg = np.full((h, w, 3), bg_color, dtype=np.float32)
-    blended = fg * alpha_f[:, :, None] + bg * (1 - alpha_f[:, :, None])  # type: ignore[operator]
+    blended = fg * alpha_f[:, :, None] + bg * (1 - alpha_f[:, :, None])
     composite = np.asarray(blended, dtype=np.uint8)
 
     _composite_cache[cache_key] = composite

@@ -34,7 +34,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from PySide6.QtCore import Qt, QTranslator, QLibraryInfo, Signal
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPainter, QPixmap
@@ -290,7 +289,7 @@ class ConfigDialog(_BaseFramelessDialog):
 
     _ALL_KEYS = list(_ROW_KEY_MAP.keys())
 
-    def __init__(self, config: dict[str, Any],
+    def __init__(self, config: dict,
                  parent: QWidget | None = None,
                  bg_path: str | None = None,
                  close_hover: str = "#e74c3c",
@@ -1361,7 +1360,7 @@ class ConfigDialog(_BaseFramelessDialog):
         presets = [self._preset_list.item(i).text().strip()
                    for i in range(self._preset_list.count())]
 
-        data: dict[str, Any] = {
+        data: dict = {
             "detection": {
                 "interval": round(self._interval.value(), 1),
                 "confidence_threshold": round(self._threshold.value(), 2),
@@ -1434,7 +1433,7 @@ class ConfigDialog(_BaseFramelessDialog):
         """把配置字典写成带注释的 config.toml 文件。"""
         path = get_project_root() / "config.toml"
 
-        def _kv(key: str, value: Any, comment: str = "") -> None:
+        def _kv(key: str, value, comment: str = "") -> None:
             """写入 key = value 行，前面可选注释。"""
             if comment:
                 lines.append(f"# {comment}")

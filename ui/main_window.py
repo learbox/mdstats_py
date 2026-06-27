@@ -84,7 +84,7 @@ import os
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Any, TypeVar, cast
+
 
 from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QIcon, QPalette
@@ -137,9 +137,6 @@ from ui.theme_manager import ThemeManager, ThemeWidgets
 from ui.titlebar import TitleBar
 
 _RESOURCE_DIR = get_project_root() / "resource"
-
-_T = TypeVar("_T")
-
 
 # =============================================================================
 # _setup_combo_editor — QComboBox 表格编辑器公共初始化
@@ -523,7 +520,7 @@ class EditableComboDelegate(QStyledItemDelegate):
 # _require_widget — 类型收窄工具
 # =============================================================================
 
-def _require_widget(widget: _T | None, name: str) -> _T:
+def _require_widget(widget, name: str):
     """类型收窄 findChild 的返回值，断言控件一定存在。
 
     Qt 的 findChild() 返回 X | None，IDE 会标记可能为 None。
@@ -643,14 +640,14 @@ class MainWindow(QMainWindow):
                     ("cyBottomHeight", ctypes.c_int),
                 ]
             margins = _MARGINS(1, 1, 1, 1)  # 每边扩展 1px
-            ctypes.windll.dwmapi.DwmExtendFrameIntoClientArea(  # type: ignore[attr-defined]
+            ctypes.windll.dwmapi.DwmExtendFrameIntoClientArea(
                 hwnd, ctypes.byref(margins),
             )
 
             # ---- Win11 圆角 ----
             dwmwa_window_corner_preference = 33
             dwmwcp_round = 2
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(  # type: ignore[attr-defined]
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
                 hwnd, dwmwa_window_corner_preference,
                 ctypes.byref(ctypes.c_int(dwmwcp_round)),
                 ctypes.sizeof(ctypes.c_int),
@@ -660,9 +657,9 @@ class MainWindow(QMainWindow):
 
     # 窗口边缘 resize 检测敏感宽度（像素），鼠标进入此范围触发 resize 光标
     _BORDER_WIDTH = 6
-    _resize_edge: Any = None  # 当前 resize 边缘方向
+    _resize_edge = None  # 当前 resize 边缘方向
 
-    def _edge_at(self, global_pos) -> Any:
+    def _edge_at(self, global_pos):
         """检测鼠标的全局坐标是否在窗口边缘，返回 Qt.Edge 或 None。
 
         用窗口的 geometry()（全局坐标）和鼠标位置比较，判断鼠标是否在
@@ -681,13 +678,13 @@ class MainWindow(QMainWindow):
 
         # 四角优先（两个箭头方向组合）
         if top_edge and left_edge:
-            return Qt.Edge.LeftEdge | Qt.Edge.TopEdge  # type: ignore[return-value]
+            return Qt.Edge.LeftEdge | Qt.Edge.TopEdge
         if top_edge and right_edge:
-            return Qt.Edge.RightEdge | Qt.Edge.TopEdge  # type: ignore[return-value]
+            return Qt.Edge.RightEdge | Qt.Edge.TopEdge
         if bottom_edge and left_edge:
-            return Qt.Edge.LeftEdge | Qt.Edge.BottomEdge  # type: ignore[return-value]
+            return Qt.Edge.LeftEdge | Qt.Edge.BottomEdge
         if bottom_edge and right_edge:
-            return Qt.Edge.RightEdge | Qt.Edge.BottomEdge  # type: ignore[return-value]
+            return Qt.Edge.RightEdge | Qt.Edge.BottomEdge
         # 单边
         if top_edge:
             return Qt.Edge.TopEdge    # 上边缘: ↑
@@ -705,9 +702,9 @@ class MainWindow(QMainWindow):
         t = event.type()
         if t == QEvent.Type.MouseMove:
             # PySide6 类型存根中 QEvent 没有 globalPosition，但 MouseEvent 有
-            self._update_resize_cursor(event.globalPosition().toPoint())  # type: ignore[attr-defined]
+            self._update_resize_cursor(event.globalPosition().toPoint())
         elif t == QEvent.Type.MouseButtonPress:
-            edge = self._edge_at(event.globalPosition().toPoint())  # type: ignore[attr-defined]
+            edge = self._edge_at(event.globalPosition().toPoint())
             if edge and self.windowHandle():
                 self.windowHandle().startSystemResize(edge)
                 return True
@@ -727,9 +724,9 @@ class MainWindow(QMainWindow):
             self.setCursor(Qt.CursorShape.SizeHorCursor)
         elif edge == Qt.Edge.TopEdge or edge == Qt.Edge.BottomEdge:
             self.setCursor(Qt.CursorShape.SizeVerCursor)
-        elif edge == (Qt.Edge.LeftEdge | Qt.Edge.TopEdge) or edge == (Qt.Edge.RightEdge | Qt.Edge.BottomEdge):  # type: ignore[comparison-overlap]
+        elif edge == (Qt.Edge.LeftEdge | Qt.Edge.TopEdge) or edge == (Qt.Edge.RightEdge | Qt.Edge.BottomEdge):
             self.setCursor(Qt.CursorShape.SizeFDiagCursor)
-        elif edge == (Qt.Edge.RightEdge | Qt.Edge.TopEdge) or edge == (Qt.Edge.LeftEdge | Qt.Edge.BottomEdge):  # type: ignore[comparison-overlap]
+        elif edge == (Qt.Edge.RightEdge | Qt.Edge.TopEdge) or edge == (Qt.Edge.LeftEdge | Qt.Edge.BottomEdge):
             self.setCursor(Qt.CursorShape.SizeBDiagCursor)
         else:
             self.setCursor(Qt.CursorShape.ArrowCursor)
@@ -802,7 +799,7 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         # ---- 1. 加载配置 ----
-        self._config: dict[str, Any] = load_config()
+        self._config: dict = load_config()
         # 如果用户开启了日志模式，初始化日志系统
         # 注意：init_log 多次调用只生效第一次（日志路径不变），
         #       set_scopes 每次都会更新（支持热重载时调整记录范围）
@@ -840,11 +837,11 @@ class MainWindow(QMainWindow):
         init_active_csv_from_config()
 
         # ---- 4. 运行时状态变量 ----
-        self._worker: Any = None              # 后台识别线程（StatsWorker）
+        self._worker = None              # 后台识别线程（StatsWorker）
         self._wait_timer: QTimer | None = None# 等待游戏启动的轮询定时器
         self._info_timer: QTimer | None = None# 右下角信息标签刷新定时器
         self._match = MatchState()               # 三阶段对局状态机
-        self._rank_worker: Any | None = None  # type: ignore[annotation-unchecked] — 段位图标检测线程（延迟导入）
+        self._rank_worker = None  # 段位图标检测线程（延迟导入）
         self._rank_icon_result: dict | None = None        # 段位图标检测结果暂存
         self._notifying = False                         # 防_result_detected重入
         # 段位图标在硬币阶段（阶段1）显示，但数据要到对局结束才写入 CSV。
@@ -891,7 +888,7 @@ class MainWindow(QMainWindow):
         self._title_bar.close_clicked.connect(self.close)
         root_layout = content.layout()
         if root_layout is not None:
-            root_layout.insertWidget(0, self._title_bar)  # type: ignore[attr-defined]
+            root_layout.insertWidget(0, self._title_bar)
 
         self.setCentralWidget(content)
 
@@ -909,7 +906,7 @@ class MainWindow(QMainWindow):
             self.setWindowIcon(QIcon(str(icon_path)))
 
         # ---- 10. 获取所有控件引用 ----
-        # _require_widget 将 findChild 的 X | None 收窄为 X，消除类型警告
+        # _require_widget 获取 findChild 返回的控件，不存在时抛出明确错误
         self._btn_start        = _require_widget(content.findChild(QPushButton, "btn_start"), "btn_start")
         self._btn_stop         = _require_widget(content.findChild(QPushButton, "btn_stop"), "btn_stop")
         self._deck_input       = _require_widget(content.findChild(QLineEdit, "deck_input"), "deck_input")
@@ -966,7 +963,7 @@ class MainWindow(QMainWindow):
         # ---- 13. 悬浮窗按钮 ----
         self._btn_float = _require_widget(content.findChild(QPushButton, "btn_float"), "btn_float")
         self._btn_float.clicked.connect(self._on_toggle_float)
-        self._float_window: Any = None           # 悬浮窗实例（延迟创建）
+        self._float_window = None           # 悬浮窗实例（延迟创建）
         self._float_owner_hwnd: int = 0          # 隐藏 Owner 窗口句柄（延迟创建）
 
         # ---- 14. 表格配置 ----
@@ -2448,7 +2445,7 @@ class MainWindow(QMainWindow):
         defaults_map = APP_STATE_DEFAULTS
         for table, key in [(self._stats_table, "stats"), (self._record_table, "record")]:
             defaults: list[int] = defaults_map[key]
-            widths = cast(list[int], saved.get(key, []))
+            widths = saved.get(key, [])
             # record 表跳过多余的列 0（旧格式曾保存隐藏列"序号"的宽度 0）
             if key == "record" and widths and widths[0] == 0:
                 widths = widths[1:]
@@ -2489,7 +2486,7 @@ class MainWindow(QMainWindow):
         self.activateWindow()
         self.raise_()
 
-    def changeEvent(self, event: Any) -> None:
+    def changeEvent(self, event) -> None:
         """窗口状态变化时触发。最小化按钮正常最小化到任务栏，不拦截。"""
         super().changeEvent(event)
 
@@ -2497,7 +2494,7 @@ class MainWindow(QMainWindow):
         """托盘右键退出：绕过托盘模式，直接保存状态并退出。"""
         self._real_close()  # 返回值忽略，托盘退出不阻止
 
-    def closeEvent(self, event: Any) -> None:
+    def closeEvent(self, event) -> None:
         """关闭窗口：最小化到托盘模式 → 隐藏，否则正常退出。"""
         if self._config.get("notification", {}).get("minimize_to_tray", False):
             self.hide()

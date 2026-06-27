@@ -51,7 +51,6 @@ from __future__ import annotations
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 import cv2
 import numpy as np
@@ -99,7 +98,7 @@ class FailureSampleManager:
         _debug_dir — screenshots/debug/ 目录路径
     """
 
-    def __init__(self, config: dict[str, Any] | None = None) -> None:
+    def __init__(self, config=None) -> None:
         """初始化管理器，从 config.toml 读取设置。
 
         Args:
@@ -135,7 +134,7 @@ class FailureSampleManager:
         confidence: float,
         screenshot: np.ndarray,
         threshold: float,
-        extra_meta: dict[str, Any] | None = None,
+        extra_meta=None,
     ) -> None:
         """提交一次检测结果，内部判断是否需要保存/替换/删除失败样本。
 
@@ -318,7 +317,7 @@ class FailureSampleManager:
         threshold: float,
         record_threshold: float,
         stem: str,
-        extra_meta: dict[str, Any] | None,
+        extra_meta,
     ) -> None:
         """保存失败样本的 TOML 元数据文件。
 
@@ -345,13 +344,13 @@ class FailureSampleManager:
         confidence: float,
         threshold: float,
         record_threshold: float,
-        extra_meta: dict[str, Any] | None,
-    ) -> dict[str, Any]:
+        extra_meta: dict | None,
+    ) -> dict:
         """构建 TOML 元数据字典。
 
         包含通用字段（所有 target）+ 可选专用字段（段位图标等）。
         """
-        meta: dict[str, Any] = {
+        meta = {
             "target": target,
             "confidence": round(confidence, 4),
             "threshold": round(threshold, 4),
@@ -394,7 +393,7 @@ class FailureSampleManager:
         return meta
 
     @staticmethod
-    def _format_toml(meta: dict[str, Any]) -> list[str]:
+    def _format_toml(meta: dict) -> list[str]:
         """将元数据字典格式化为带注释的 TOML 文本。
 
         每个字段附带中文注释，方便开发者直接打开文件查看诊断信息。

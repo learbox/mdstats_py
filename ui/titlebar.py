@@ -324,7 +324,6 @@ class TitleBar(QWidget):
             effect.setOffset(0, 1)
             self._title_label.setGraphicsEffect(effect)
         else:
-            # noinspection PyTypeChecker
             self._title_label.setGraphicsEffect(None)
 
         # 更新按钮悬停样式

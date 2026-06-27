@@ -34,7 +34,6 @@ pywin32 (win32gui) — 窗口定位：
 
 import numpy as np
 import mss
-# noinspection PyPackageRequirements
 import win32gui
 
 

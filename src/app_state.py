@@ -5,16 +5,18 @@
 """
 
 import tomllib
-from typing import Any
 
 from src.config import get_project_root
 
 _APP_STATE_PATH = get_project_root() / ".app_state.toml"
 
 # 各字段默认值（集中管理兜底，新增字段在此添加）
-# stats / record 为全部列宽（像素），record 不含隐藏列 0
-# splitter 为 [上, 下] 分割条绝对尺寸，main_pos / float_pos 为 [x, y]
-APP_STATE_DEFAULTS: dict[str, Any] = {
+# stats / record — 全部列宽（像素），record 不含隐藏列 0
+# splitter      — [上, 下] 分割条绝对尺寸
+# main_pos      — 主窗口上次关闭时的屏幕位置 [x, y]
+# float_pos     — 悬浮窗上次关闭时的屏幕位置 [x, y]
+# float_visible — 上次退出时悬浮窗是否打开
+APP_STATE_DEFAULTS = {
     "stats":     [80, 60, 45, 45, 70, 75, 75, 75, 85, 85, 80, 75, 70, 70, 75],
     "record":    [115, 90, 80, 75, 80, 75, 65, 70, 50, 65],
     "splitter":  [200, 300],
@@ -24,7 +26,7 @@ APP_STATE_DEFAULTS: dict[str, Any] = {
 }
 
 
-def read_app_state() -> dict[str, Any]:
+def read_app_state() -> dict:
     """读取 .app_state.toml，文件不存在/缺字段时用默认值补齐。
 
     用户手动删除文件或升级到新版本时，缺失的字段自动回填默认值，
@@ -34,14 +36,14 @@ def read_app_state() -> dict[str, Any]:
         with open(_APP_STATE_PATH, "rb") as f:
             data = tomllib.load(f)
     except (FileNotFoundError, tomllib.TOMLDecodeError):
-        data: dict[str, Any] = {}
+        data = {}
     for key, default in APP_STATE_DEFAULTS.items():
         if key not in data:
             data[key] = default
     return data
 
 
-def write_app_state(data: dict[str, Any]) -> None:
+def write_app_state(data: dict):
     """写入 .app_state.toml。
 
     手动格式化为 TOML 文本（tomllib 只读，没有写入能力）。

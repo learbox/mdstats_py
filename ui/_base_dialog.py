@@ -72,7 +72,7 @@ class _BaseFramelessDialog(QDialog):
             hwnd = int(self.winId())
             dwmwa = 33                         # DWMWA_WINDOW_CORNER_PREFERENCE
             dwmwcp_round = 2                   # 圆角模式
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(  # type: ignore[attr-defined]
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
                 hwnd, dwmwa,
                 ctypes.byref(ctypes.c_int(dwmwcp_round)),
                 ctypes.sizeof(ctypes.c_int),

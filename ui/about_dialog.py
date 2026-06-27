@@ -291,7 +291,7 @@ class AboutDialog(QDialog):
             return
         try:
             hwnd = int(self.winId())            # 获取窗口句柄（HWND）
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(  # type: ignore[attr-defined]
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
                 hwnd, 33,                        # DWMWA_WINDOW_CORNER_PREFERENCE
                 ctypes.byref(ctypes.c_int(2)),   # 2 = 圆角
                 ctypes.sizeof(ctypes.c_int),
