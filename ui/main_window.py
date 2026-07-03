@@ -1756,7 +1756,7 @@ class MainWindow(QMainWindow):
         self._notifying = False              # 防重入标志复位
         self.update_manual_buttons()
 
-    def _update_manual_buttons(self) -> None:
+    def update_manual_buttons(self) -> None:
         """根据当前 _stage 更新手动按钮的文字、颜色及撤销按钮可见性。
 
         _stage==0: "赢硬币" / "输硬币" (橙色), 撤销按钮隐藏
@@ -1797,7 +1797,7 @@ class MainWindow(QMainWindow):
         # 表格填充后即恢复列宽，不依赖 QTimer 时序，调用幂等无副作用
         self._restore_column_widths()
 
-    def _refresh_stats_table(self) -> None:
+    def refresh_stats_table(self) -> None:
         """刷新统计表格（上方表格）。
 
         数据流: load_records() → compute_stats() → 逐行填充 QTableWidget。
@@ -1833,7 +1833,7 @@ class MainWindow(QMainWindow):
         self.stats_table.setUpdatesEnabled(True)   # 恢复重绘
         self._refresh_float_window()         # 悬浮窗也更新
 
-    def _refresh_record_table(self) -> None:
+    def refresh_record_table(self) -> None:
         """刷新记录表格（下方表格），最新记录显示在最前面。
 
         从 CSV 读取所有记录后倒序填充（reversed），最新在顶部。
