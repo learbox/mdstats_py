@@ -811,10 +811,13 @@ def _detect_rank_in_roi(
     min_sz = max(20, img_w // 25)
     max_sz = min(img_w // 5, roi_h, roi_w // 2)
 
-    # 有预期尺寸时收窄范围（±40%），大幅减少无效候选
+    # 有预期尺寸时以预期值为中心收窄，避免 img_w // 25 钳住下限
+    # 例：缩略图(600px)上图标约 18px，但 img_w // 25 = 24，
+    #     max(min_sz, ...) 会把下限锁在 24，完全错过 18。
     if expected_size > 0:
-        min_sz = max(min_sz, int(expected_size * 0.6))
-        max_sz = min(max_sz, int(expected_size * 1.5))
+        half = max(12, int(expected_size * 0.5))
+        min_sz = max(10, expected_size - half)
+        max_sz = min(max_sz, expected_size + half)
 
     all_scores: dict[str, float] = {}
 
