@@ -77,7 +77,7 @@ columns = ["卡组", "对局数", "胜/负", "赢/输硬币", "赢硬币概率",
 enabled = true
 # 通知显示持续时间（秒）
 duration = 1
-# 最小化时隐藏到系统托盘（而非任务栏）
+# 关闭时隐藏到系统托盘（点 × 按钮时隐藏）
 minimize_to_tray = false
 
 # 段位图标检测
@@ -95,6 +95,8 @@ confidence_threshold = 0.7
 use_theme_bg = false
 # 在悬浮窗底部显示当前的检测状态（硬币/先后攻/胜负分数）
 show_status = false
+# 简洁模式：只显示"——"前面的部分（仅悬浮窗，不影响主窗口）
+show_status_compact = false
 # 悬浮窗宽度（像素）
 width = 250
 # 悬浮窗高度（像素）

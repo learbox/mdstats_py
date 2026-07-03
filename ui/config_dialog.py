@@ -1065,6 +1065,15 @@ class ConfigDialog(_BaseFramelessDialog):
         self._show_status_cb.setToolTip("在悬浮窗最底部显示当前检测到的硬币/先后攻/胜负。")
         lo.addWidget(self._show_status_cb)
 
+        self._show_status_compact_cb = QCheckBox("    简洁模式")
+        self._show_status_compact_cb.setToolTip(
+            "只显示\"——\"前面的部分（仅影响悬浮窗，不影响主窗口）。\n"
+            "例如\"程序已关闭——Masterduel窗口未找到\" → \"程序已关闭\"")
+        self._show_status_cb.toggled.connect(self._show_status_compact_cb.setEnabled)
+        self._show_status_cb.toggled.connect(
+            lambda checked: not checked and self._show_status_compact_cb.setChecked(False))
+        lo.addWidget(self._show_status_compact_cb)
+
         return w
 
     # =========================================================================
@@ -1271,6 +1280,7 @@ class ConfigDialog(_BaseFramelessDialog):
         # 开关类选项
         self._use_theme_bg.setChecked(fw.get("use_theme_bg", False))
         self._show_status_cb.setChecked(fw.get("show_status", False))
+        self._show_status_compact_cb.setChecked(fw.get("show_status_compact", False))
 
         # ---- 数据 ----
         # 对方卡组预设列表
@@ -1393,6 +1403,7 @@ class ConfigDialog(_BaseFramelessDialog):
             "floating_window": {
                 "use_theme_bg": self._use_theme_bg.isChecked(),
                 "show_status": self._show_status_cb.isChecked(),
+                "show_status_compact": self._show_status_compact_cb.isChecked(),
                 "width": self._fw_w.value(),
                 "height": self._fw_h.value(),
                 "bg_color": self._fw_bg.color().name(),
@@ -1551,6 +1562,8 @@ class ConfigDialog(_BaseFramelessDialog):
             "是否使用主题背景图（false = 纯色，方便 OBS 颜色键捕捉）")
         _kv("show_status", fw.get("show_status", False),
             "在悬浮窗底部显示当前的检测状态（硬币/先后攻/胜负分数）")
+        _kv("show_status_compact", fw.get("show_status_compact", False),
+            "简洁模式：只显示\"——\"前面的部分（仅悬浮窗，不影响主窗口）")
         _kv("width", fw.get("width", 250), "悬浮窗宽度（像素）")
         _kv("height", fw.get("height", 300), "悬浮窗高度（像素）")
         _kv("bg_color", fw.get("bg_color", "#BDEF0A"), "背景色")

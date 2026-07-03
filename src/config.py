@@ -179,6 +179,8 @@ minimize_to_tray = false
 use_theme_bg = false
 # 在悬浮窗底部显示检测状态（硬币/先后攻/胜负分数）
 show_status = false
+# 简洁模式：只显示"——"前面的部分（仅悬浮窗）
+show_status_compact = false
 # 悬浮窗宽度（像素）
 width = 250
 # 悬浮窗高度（像素，实际低于内容高度时自动扩容）

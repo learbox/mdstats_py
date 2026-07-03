@@ -576,7 +576,10 @@ class MainWindow(QMainWindow):
             msg = f"{msg}  |  ⚠ 文件被占用，{pending} 条暂存"
         self._status_label.setText(msg)
         if self._float_window is not None:
-            self._float_window.update_status(msg)
+            float_msg = msg
+            if self._config.get("floating_window", {}).get("show_status_compact", False):
+                float_msg = msg.split(" — ")[0].strip()
+            self._float_window.update_status(float_msg)
 
     def _on_screenshot_status(self, msg: str) -> None:
         """截图热键消息 → 按内容区分 SCRN / STATUS 写日志。"""
