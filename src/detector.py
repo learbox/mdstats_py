@@ -580,13 +580,32 @@ _NO_TIER_RANKS = {"巅峰"}
 # 避免每次检测都重新合成模板（合成涉及 resize + alpha 混合，较慢）
 _composite_cache: dict[tuple, np.ndarray] = {}
 
-# 图标匹配线程池：cv2.matchTemplate 释放 GIL，8 图标并行可充分利用多核。
-# 复用同一池避免每次创建/销毁线程的开销。
+# ── 多线程图标匹配 ──
+# 段位检测需要把 8 张源素材（新手~巅峰）逐一缩放、Alpha 混合、matchTemplate。
+# 单线程串行 → 8 个图标排队等，总耗时 = 8 × 单个耗时。
+#
+# 为什么可以并行？
+#   cv2.matchTemplate 内部是 C 代码，调用时会释放 Python 的 GIL（全局解释器锁），
+#   允许其他线程同时执行 Python 或 C 代码。8 个图标的匹配互不依赖，各自读各自的
+#   模板和截图像素，天然的"互不干扰"任务。
+#
+# 线程池（ThreadPoolExecutor）：
+#   一组预先创建好的"工人"，来了任务就分配，做完了不销毁，等着接下一个。
+#   max_workers=4：同时最多 4 个工人干活。
+#   为什么不是 8？
+#     每个图标匹配很快（~10-30ms），4 个工人两批就跑完了。
+#     更重要的是 as_completed() 机制：谁先算完就先看谁的结果，
+#     如果某个图标匹配到 ≥0.95（几乎确定就是它），剩下没算完的直接不管了。
+#     所以真正的加速瓶颈不是"等齐 8 个"，而是"等到第一个高分"。
+#
+# 为什么复用同一个池？
+#   创建/销毁线程有开销。检测每秒跑 2 次，每次都 new 一个池 ≈ 每秒建 8 个线程又销毁。
+#   复用一个池 → 线程一直活着，省掉反复创建的开销。
 _executor: ThreadPoolExecutor | None = None
 
 
 def _get_executor() -> ThreadPoolExecutor:
-    """获取复用的线程池（延迟初始化，max_workers=4 适配主流 4-8 核 CPU）。"""
+    """获取全局复用的线程池。第一次调用时创建，之后直接返回同一个。"""
     global _executor
     if _executor is None:
         _executor = ThreadPoolExecutor(max_workers=4)
@@ -844,32 +863,45 @@ def _detect_rank_in_roi(
         return best_name, best_score, best_x, best_y, best_w, best_w, all_scores
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # 阶段 2 — 并行精搜：全部图标在最佳尺寸 ±8px 精搜（步长 2px）
+    # 阶段 2 — 并行精搜
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # 8 个图标的匹配互不依赖，cv2.matchTemplate 释放 GIL，
-    # ThreadPoolExecutor 可真正并行执行，显著缩短此阶段耗时。
+    # 此时已通过锚定图标确定了最佳尺寸（best_size），接下来搜的是：
+    # "在这个尺寸下，8 个图标里哪个匹配分最高？"
+    #
+    # 尺寸范围：best_size ±8px，步长 2px（约 9 个候选尺寸）
+    # 8 个图标 × 9 个尺寸 = 72 次 matchTemplate
+    #
+    # 为什么并行？
+    #   每个图标独立——新手模板只和新手比、钻石模板只和钻石比，互不依赖。
+    #   72 次匹配全部扔进线程池，4 个工人同时跑。
+    #
+    # as_completed() 的作用：
+    #   普通的 parallel() 要等所有任务完成后才返回结果。
+    #   as_completed() 不同：哪个任务先算完就先处理哪个，不干等慢的。
+    #   如果第一个返回的图标就 ≥0.95（几乎确定找对了），直接 break 不等剩余的。
     fine_start = max(min_sz, best_size - 8)
     fine_end = min(max_sz, best_size + 10)
     sz_range = range(fine_start, fine_end, 2)
 
     executor = _get_executor()
-    futures = {}
-    for name in _RANK_LABELS:
-        f = executor.submit(
-            _match_icon_at_sizes,
-            roi, name, sz_range, bg_color, roi_x, roi_y)
-        futures[f] = name
+    futures = {}                       # {Future: 图标名}，把任务和图标对应起来
+    for name in _RANK_LABELS:          # 遍历 8 个图标（新手~巅峰）
+        f = executor.submit(            # 提交任务，不阻塞，立刻返回一个 Future
+            _match_icon_at_sizes,       # 要在线程里执行的函数
+            roi, name, sz_range,        # 前 3 个参数
+            bg_color, roi_x, roi_y)     # 后 3 个参数
+        futures[f] = name               # 记住：这个 Future 对应哪个图标
 
     best_name, best_score = "", 0.0
     best_x = best_y = best_w = 0
-    for f in as_completed(futures):
-        name = futures[f]
-        nm, sc, bx, by, bw, bh = f.result()
+    for f in as_completed(futures):     # 谁先算完就先处理谁
+        name = futures[f]                # 查出是哪个图标
+        nm, sc, bx, by, bw, bh = f.result()  # 取结果（已完成，不阻塞）
         all_scores[name] = sc
         if sc > best_score:
             best_name, best_score = nm, sc
             best_x, best_y, best_w = bx, by, bw
-            # 高置信度早停：匹配度 ≥0.95 说明几乎确定，无需再试其他图标
+            # 高置信度早停：几乎确定就是它，不等剩余任务了
             if best_score >= 0.95:
                 break
 
@@ -1134,7 +1166,10 @@ def detect_rank_icon(
             px, py, pw, ph = _search_bbox(cx, cy, cw, ch)
             search_roi = screenshot[py:py + ph, px:px + pw]
 
-            # 并行匹配全部图标（cv2.matchTemplate 释放 GIL）
+            # 缓存路径 — 并行匹配
+            # 位置已从 rank_positions.toml 读取，图标尺寸也已知（cw ±15px）。
+            # 只需在缓存位置附近精搜：8 图标 × ~11 尺寸 = 88 次匹配。
+            # 与阶段 2 相同的并行策略：全部 submit → as_completed 取最快结果。
             sz_start = max(30, cw - 15)
             sz_end = min(cw + 18, pw, ph)
             sz_range = range(sz_start, sz_end, 3)
