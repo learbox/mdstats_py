@@ -177,7 +177,7 @@ minimize_to_tray = false
 [floating_window]
 # 是否使用主题背景图（false = 纯色，方便 OBS 颜色键捕捉）
 use_theme_bg = false
-# 在悬浮窗底部显示检测状态（硬币/先后攻/胜负分数）
+# 在悬浮窗底部显示当前的状态消息（程序运行状态、识别进度等）
 show_status = false
 # 简洁模式：只显示"——"前面的部分（仅悬浮窗）
 show_status_compact = false

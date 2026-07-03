@@ -148,7 +148,8 @@ python main.py
 | `notification.minimize_to_tray` | 关闭时隐藏到系统托盘 | `false` |
 | `floating_window.bg_color` | 悬浮窗背景色 | `#BDEF0A` |
 | `floating_window.opacity` | 悬浮窗不透明度 (0-100) | `50` |
-| `floating_window.show_status` | 悬浮窗底部显示检测状态 | `false` |
+| `floating_window.show_status` | 悬浮窗底部显示状态消息 | `false` |
+| `floating_window.show_status_compact` | 状态消息简洁模式 | `false` |
 | `floating_window.rows` | 悬浮窗显示数据行 | 8 项默认 |
 
 ### 日志模式快速上手

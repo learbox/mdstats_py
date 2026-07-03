@@ -1061,8 +1061,8 @@ class ConfigDialog(_BaseFramelessDialog):
         lo.addWidget(self._use_theme_bg)
 
         # ---- 底部状态栏 ----
-        self._show_status_cb = QCheckBox("底部显示检测状态")
-        self._show_status_cb.setToolTip("在悬浮窗最底部显示当前检测到的硬币/先后攻/胜负。")
+        self._show_status_cb = QCheckBox("底部显示状态消息")
+        self._show_status_cb.setToolTip("在悬浮窗最底部显示当前状态（程序运行状态、识别进度等）。")
         lo.addWidget(self._show_status_cb)
 
         compact_row = QHBoxLayout()
@@ -1564,7 +1564,7 @@ class ConfigDialog(_BaseFramelessDialog):
         _kv("use_theme_bg", fw.get("use_theme_bg", False),
             "是否使用主题背景图（false = 纯色，方便 OBS 颜色键捕捉）")
         _kv("show_status", fw.get("show_status", False),
-            "在悬浮窗底部显示当前的检测状态（硬币/先后攻/胜负分数）")
+            "在悬浮窗底部显示当前的状态消息（程序运行状态、识别进度等）")
         _kv("show_status_compact", fw.get("show_status_compact", False),
             "简洁模式：只显示\"——\"前面的部分（仅悬浮窗，不影响主窗口）")
         _kv("width", fw.get("width", 250), "悬浮窗宽度（像素）")
