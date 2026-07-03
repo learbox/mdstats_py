@@ -1065,14 +1065,19 @@ class ConfigDialog(_BaseFramelessDialog):
         self._show_status_cb.setToolTip("在悬浮窗最底部显示当前检测到的硬币/先后攻/胜负。")
         lo.addWidget(self._show_status_cb)
 
-        self._show_status_compact_cb = QCheckBox("    简洁模式")
+        compact_row = QHBoxLayout()
+        compact_row.setContentsMargins(24, 0, 0, 0)
+        self._show_status_compact_cb = QCheckBox("简洁模式")
         self._show_status_compact_cb.setToolTip(
             "只显示\"——\"前面的部分（仅影响悬浮窗，不影响主窗口）。\n"
             "例如\"程序已关闭——Masterduel窗口未找到\" → \"程序已关闭\"")
-        self._show_status_cb.toggled.connect(self._show_status_compact_cb.setEnabled)
+        compact_row.addWidget(self._show_status_compact_cb)
+        compact_row.addStretch()
+        lo.addLayout(compact_row)
         self._show_status_cb.toggled.connect(
-            lambda checked: not checked and self._show_status_compact_cb.setChecked(False))
-        lo.addWidget(self._show_status_compact_cb)
+            lambda on: self._set_sub_disabled(self._show_status_compact_cb, not on))
+        self._show_status_cb.toggled.connect(
+            lambda on: not on and self._show_status_compact_cb.setChecked(False))
 
         return w
 
