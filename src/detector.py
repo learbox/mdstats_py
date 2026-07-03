@@ -119,6 +119,8 @@ TM_CCOEFF_NORMED 的优势:
 """
 
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import cv2
 import numpy as np
 from src.config import get_project_root
@@ -590,6 +592,18 @@ _EXPECTED_ICON_SIZE: dict[str, int] = {
 # 避免每次检测都重新合成模板（合成涉及 resize + alpha 混合，较慢）
 _composite_cache: dict[tuple, np.ndarray] = {}
 
+# 图标匹配线程池：cv2.matchTemplate 释放 GIL，8 图标并行可充分利用多核。
+# 复用同一池避免每次创建/销毁线程的开销。
+_executor: ThreadPoolExecutor | None = None
+
+
+def _get_executor() -> ThreadPoolExecutor:
+    """获取复用的线程池（延迟初始化，max_workers=4 适配主流 4-8 核 CPU）。"""
+    global _executor
+    if _executor is None:
+        _executor = ThreadPoolExecutor(max_workers=4)
+    return _executor
+
 # 段位图标位置缓存：{(分辨率宽, 分辨率高, "player"/"opponent"): (x, y, w, h)}
 # 由 roi_manager 管理文件 I/O
 _position_cache: dict[tuple, tuple[int, int, int, int]] = {}
@@ -847,16 +861,27 @@ def _detect_rank_in_roi(
         return best_name, best_score, best_x, best_y, best_w, best_w, all_scores
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # 阶段 2 — 统一精搜：全部图标在最佳尺寸 ±8px 精搜（步长 2px）
+    # 阶段 2 — 并行精搜：全部图标在最佳尺寸 ±8px 精搜（步长 2px）
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 8 个图标的匹配互不依赖，cv2.matchTemplate 释放 GIL，
+    # ThreadPoolExecutor 可真正并行执行，显著缩短此阶段耗时。
     fine_start = max(min_sz, best_size - 8)
     fine_end = min(max_sz, best_size + 10)
+    sz_range = range(fine_start, fine_end, 2)
+
+    executor = _get_executor()
+    futures = {}
+    for name in _RANK_LABELS:
+        f = executor.submit(
+            _match_icon_at_sizes,
+            roi, name, sz_range, bg_color, roi_x, roi_y)
+        futures[f] = name
 
     best_name, best_score = "", 0.0
     best_x = best_y = best_w = 0
-    for name in _RANK_LABELS:
-        nm, sc, bx, by, bw, bh = _match_icon_at_sizes(
-            roi, name, range(fine_start, fine_end, 2), bg_color, roi_x, roi_y)
+    for f in as_completed(futures):
+        name = futures[f]
+        nm, sc, bx, by, bw, bh = f.result()
         all_scores[name] = sc
         if sc > best_score:
             best_name, best_score = nm, sc
@@ -1126,14 +1151,25 @@ def detect_rank_icon(
             px, py, pw, ph = _search_bbox(cx, cy, cw, ch)
             search_roi = screenshot[py:py + ph, px:px + pw]
 
+            # 并行匹配全部图标（cv2.matchTemplate 释放 GIL）
+            sz_start = max(30, cw - 15)
+            sz_end = min(cw + 18, pw, ph)
+            sz_range = range(sz_start, sz_end, 3)
+
+            executor = _get_executor()
+            futures = {}
+            for name in _RANK_LABELS:
+                f = executor.submit(
+                    _match_icon_at_sizes,
+                    search_roi, name, sz_range, bg_color, px, py,
+                    strict_roi=True)
+                futures[f] = name
+
             best_name, best_score = "", 0.0
             best_x = best_y = best_w = 0
-            for name in _RANK_LABELS:
-                sz_start = max(30, cw - 15)
-                sz_end = min(cw + 18, pw, ph)
-                nm, sc, bx, by, bw, bh = _match_icon_at_sizes(
-                    search_roi, name, range(sz_start, sz_end, 3),
-                    bg_color, px, py, strict_roi=True)
+            for f in as_completed(futures):
+                name = futures[f]
+                nm, sc, bx, by, bw, bh = f.result()
                 side_scores[name] = sc
                 if sc > best_score:
                     best_name, best_score = nm, sc
