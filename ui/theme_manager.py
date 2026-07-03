@@ -41,10 +41,9 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor, QPalette, QPixmap
-from PySide6.QtWidgets import QApplication, QBoxLayout, QFrame, QHBoxLayout, QPushButton, QTableWidget, QToolButton, QWidget
+from PySide6.QtWidgets import QApplication, QBoxLayout, QFrame, QHBoxLayout
 
 from src.theme_loader import Theme, load_theme
-from ui.titlebar import TitleBar
 
 
 
