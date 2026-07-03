@@ -38,7 +38,6 @@ QBrush   — Qt 的"画刷"，用来填充区域。可以是纯色、渐变或�
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -53,7 +52,6 @@ from ui.titlebar import TitleBar
 # ThemeWidgets — 控件引用容器
 # =============================================================================
 
-@dataclass
 class ThemeWidgets:
     """MainWindow 中 ThemeManager 需要访问的控件引用集合。
 
@@ -77,18 +75,34 @@ class ThemeWidgets:
         refresh_record_table            — MainWindow 的刷新记录表格方法
         update_manual_buttons           — MainWindow 的更新手动按钮颜色方法
     """
-    stats_table: QTableWidget
-    record_table: QTableWidget
-    btn_start: QPushButton
-    btn_stop: QPushButton
-    btn_delete_last: QToolButton
-    btn_reload: QToolButton
-    title_bar: TitleBar
-    status_frame: QFrame
-    content: QWidget
-    refresh_stats_table = field()
-    refresh_record_table = field()
-    update_manual_buttons = field()
+
+    def __init__(
+        self, *,
+        stats_table: QTableWidget,
+        record_table: QTableWidget,
+        btn_start: QPushButton,
+        btn_stop: QPushButton,
+        btn_delete_last: QToolButton,
+        btn_reload: QToolButton,
+        title_bar: TitleBar,
+        status_frame: QFrame,
+        content: QWidget,
+        refresh_stats_table,
+        refresh_record_table,
+        update_manual_buttons,
+    ):
+        self.stats_table = stats_table
+        self.record_table = record_table
+        self.btn_start = btn_start
+        self.btn_stop = btn_stop
+        self.btn_delete_last = btn_delete_last
+        self.btn_reload = btn_reload
+        self.title_bar = title_bar
+        self.status_frame = status_frame
+        self.content = content
+        self.refresh_stats_table = refresh_stats_table
+        self.refresh_record_table = refresh_record_table
+        self.update_manual_buttons = update_manual_buttons
 
 
 # =============================================================================
