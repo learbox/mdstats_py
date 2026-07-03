@@ -1284,6 +1284,8 @@ class ConfigDialog(_BaseFramelessDialog):
         self._use_theme_bg.setChecked(fw.get("use_theme_bg", False))
         self._show_status_cb.setChecked(fw.get("show_status", False))
         self._show_status_compact_cb.setChecked(fw.get("show_status_compact", False))
+        self._set_sub_disabled(self._show_status_compact_cb,
+                               not fw.get("show_status", False))
 
         # ---- 数据 ----
         # 对方卡组预设列表
