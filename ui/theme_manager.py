@@ -36,7 +36,6 @@ QBrush   — Qt 的"画刷"，用来填充区域。可以是纯色、渐变或�
     重复上述 1-4 步，额外需要先清空旧主题遗留的 stylesheet 和 QPalette
 """
 
-from __future__ import annotations
 
 from pathlib import Path
 
@@ -47,62 +46,6 @@ from PySide6.QtWidgets import QApplication, QBoxLayout, QFrame, QHBoxLayout, QPu
 from src.theme_loader import Theme, load_theme
 from ui.titlebar import TitleBar
 
-
-# =============================================================================
-# ThemeWidgets — 控件引用容器
-# =============================================================================
-
-class ThemeWidgets:
-    """MainWindow 中 ThemeManager 需要访问的控件引用集合。
-
-    为什么需要这个容器？
-        ThemeManager 的方法需要操作 MainWindow 里的各种控件（表格、按钮、
-        标题栏等）。如果直接传 MainWindow 对象，ThemeManager 就需要访问
-        MainWindow 的 protected 成员（以 _ 开头的属性），IDE 会报警告。
-
-    解决方案：
-        MainWindow 初始化时把所有 ThemeManager 需要的控件收集到这个容器里，
-        ThemeManager 只接收 ThemeWidgets，不再接触 MainWindow。
-        这样每个模块的职责清晰：MainWindow 管布局，ThemeManager 管配色。
-
-    每个字段的含义：
-        stats_table  / record_table     — 统计表格和记录表格（QTableWidget）
-        btn_start / btn_stop / btn_delete_last — 启动/停止/删除最后按钮
-        title_bar                       — 自定义标题栏
-        status_frame                    — 底部状态栏容器（QFrame#customStatusBar）
-        content                         — 窗口主区域（#contentWidget）
-        refresh_stats_table             — MainWindow 的刷新统计表格方法
-        refresh_record_table            — MainWindow 的刷新记录表格方法
-        update_manual_buttons           — MainWindow 的更新手动按钮颜色方法
-    """
-
-    def __init__(
-        self, *,
-        stats_table: QTableWidget,
-        record_table: QTableWidget,
-        btn_start: QPushButton,
-        btn_stop: QPushButton,
-        btn_delete_last: QToolButton,
-        btn_reload: QToolButton,
-        title_bar: TitleBar,
-        status_frame: QFrame,
-        content: QWidget,
-        refresh_stats_table,
-        refresh_record_table,
-        update_manual_buttons,
-    ):
-        self.stats_table = stats_table
-        self.record_table = record_table
-        self.btn_start = btn_start
-        self.btn_stop = btn_stop
-        self.btn_delete_last = btn_delete_last
-        self.btn_reload = btn_reload
-        self.title_bar = title_bar
-        self.status_frame = status_frame
-        self.content = content
-        self.refresh_stats_table = refresh_stats_table
-        self.refresh_record_table = refresh_record_table
-        self.update_manual_buttons = update_manual_buttons
 
 
 # =============================================================================
@@ -235,7 +178,7 @@ class ThemeManager:
     # 控件着色方法
     # =========================================================================
 
-    def apply_to_widgets(self, w: ThemeWidgets) -> None:
+    def apply_to_widgets(self, w) -> None:
         """将已加载的主题完整应用到所有控件。
 
         这是主题应用的"总入口"，在初始化和主题切换时都会调用。
@@ -261,7 +204,7 @@ class ThemeManager:
         w.title_bar.set_title("MD Stats")
         w.title_bar.reload_style(self.titlebar_cfg, self.assets_dir)
 
-    def do_apply_pixmaps(self, w: ThemeWidgets) -> None:
+    def do_apply_pixmaps(self, w) -> None:
         """首次显示窗口时，用 QPalette 贴背景图片。
 
         为什么在 showEvent 时调用？
@@ -306,7 +249,7 @@ class ThemeManager:
             elif selector == "QHeaderView::section:vertical":
                 pass  # 同上
 
-    def apply_static_button_palette(self, w: ThemeWidgets) -> None:
+    def apply_static_button_palette(self, w) -> None:
         """给 QToolButton 控件设置样式。
 
         btn_delete_last 使用 lose（红色系），btn_reload 使用默认按钮色。
@@ -357,7 +300,7 @@ class ThemeManager:
             + self._make_toolbutton_menu_style(btn_bg, reload_hover)
         )
 
-    def apply_table_viewport_palette(self, w: ThemeWidgets) -> None:
+    def apply_table_viewport_palette(self, w) -> None:
         """设置表格区域的背景色。
 
         Qt 的 QTableWidget 有一个特殊架构：
@@ -425,7 +368,7 @@ class ThemeManager:
             self.set_palette_bg(hh, None, header_bg)
             hh.setStyleSheet(f"background-color: {header_bg};")
 
-    def wrap_layouts(self, w: ThemeWidgets) -> None:
+    def wrap_layouts(self, w) -> None:
         """把 ctrlLayout 和 bottomLayout 包进 QFrame，方便 QSS 贴 panel_bg。
 
         背景说明：

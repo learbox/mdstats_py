@@ -133,7 +133,7 @@ from src.recorder import (
 # capture / stats_worker 延迟导入（启动时才需要 OpenCV，避免程序启动等待 ~260ms）
 from src.theme_loader import Theme, load_theme
 from ui.floating_window import FloatingWindow, _ROW_KEY_MAP
-from ui.theme_manager import ThemeManager, ThemeWidgets
+from ui.theme_manager import ThemeManager
 from ui.titlebar import TitleBar
 
 _RESOURCE_DIR = get_project_root() / "resource"
@@ -560,7 +560,7 @@ class MainWindow(QMainWindow):
 
     def _do_apply_pixmaps(self) -> None:
         """首次显示时用 QPalette 贴背景图片（showEvent 中调用）。"""
-        self._tm.do_apply_pixmaps(self._theme_widgets)
+        self._tm.do_apply_pixmaps(self)
 
     # =========================================================================
     # 基础 UI 工具方法
@@ -769,15 +769,15 @@ class MainWindow(QMainWindow):
 
     def _apply_static_button_palette(self) -> None:
         """应用停止/删除按钮的静态配色。"""
-        self._tm.apply_static_button_palette(self._theme_widgets)
+        self._tm.apply_static_button_palette(self)
 
     def _apply_theme_to_widgets(self) -> None:
         """重新应用主题到所有控件（主题切换时调用）。"""
-        self._tm.apply_to_widgets(self._theme_widgets)
+        self._tm.apply_to_widgets(self)
 
     def _apply_table_viewport_palette(self) -> None:
         """应用表格 viewport 的背景色。"""
-        self._tm.apply_table_viewport_palette(self._theme_widgets)
+        self._tm.apply_table_viewport_palette(self)
 
     # =========================================================================
     # __init__ — 主窗口初始化
@@ -792,7 +792,7 @@ class MainWindow(QMainWindow):
     #   7. 获取所有控件引用（findChild）
     #   8. 连接信号/槽
     #   9. 配置表格（列数/标题/委托）
-    #   10. 构建 ThemeWidgets 容器
+    #   10. 应用控件调色板
     #   11. 应用表格调色板
     #   12. 延迟加载 CSV 数据
     # =========================================================================
@@ -880,18 +880,18 @@ class MainWindow(QMainWindow):
         ui = Ui_MainWindow()
         ui.setupUi(content)
         content.setObjectName("contentWidget") # 覆盖 setupUi 设置的 objectName
-        self._content = content
+        self.content = content
 
         # ---- 8. 插入自定义标题栏（到 content 布局的最顶部） ----
         assets_dir = self._tm.assets_dir or (get_project_root() / "resource")
-        self._title_bar = TitleBar(
+        self.title_bar = TitleBar(
             "MD Stats", self._tm.titlebar_cfg, assets_dir, self
         )
-        self._title_bar.minimize_clicked.connect(self.showMinimized)
-        self._title_bar.close_clicked.connect(self.close)
+        self.title_bar.minimize_clicked.connect(self.showMinimized)
+        self.title_bar.close_clicked.connect(self.close)
         root_layout = content.layout()
         if root_layout is not None:
-            root_layout.insertWidget(0, self._title_bar)
+            root_layout.insertWidget(0, self.title_bar)
 
         self.setCentralWidget(content)
 
@@ -910,8 +910,8 @@ class MainWindow(QMainWindow):
 
         # ---- 10. 获取所有控件引用 ----
         # _require_widget 获取 findChild 返回的控件，不存在时抛出明确错误
-        self._btn_start        = _require_widget(content.findChild(QPushButton, "btn_start"), "btn_start")
-        self._btn_stop         = _require_widget(content.findChild(QPushButton, "btn_stop"), "btn_stop")
+        self.btn_start        = _require_widget(content.findChild(QPushButton, "btn_start"), "btn_start")
+        self.btn_stop         = _require_widget(content.findChild(QPushButton, "btn_stop"), "btn_stop")
         self._deck_input       = _require_widget(content.findChild(QLineEdit, "deck_input"), "deck_input")
         self._btn_manual_win   = _require_widget(content.findChild(QPushButton, "btn_manual_win"), "btn_manual_win")
         self._btn_manual_lose  = _require_widget(content.findChild(QPushButton, "btn_manual_lose"), "btn_manual_lose")
@@ -919,11 +919,11 @@ class MainWindow(QMainWindow):
         self._btn_lock_deck    = _require_widget(content.findChild(QPushButton, "btn_lock_deck"), "btn_lock_deck")
         self._btn_lock_deck.setText("锁定卡组")  # 初始: 输入框未锁定
         self._btn_rank_stats   = _require_widget(content.findChild(QPushButton, "btn_rank_stats"), "btn_rank_stats")
-        self._stats_table      = _require_widget(content.findChild(QTableWidget, "stats_table"), "stats_table")
-        self._record_table     = _require_widget(content.findChild(QTableWidget, "record_table"), "record_table")
-        self._btn_reload       = _require_widget(content.findChild(QToolButton, "btn_reload"), "btn_reload")
+        self.stats_table      = _require_widget(content.findChild(QTableWidget, "stats_table"), "stats_table")
+        self.record_table     = _require_widget(content.findChild(QTableWidget, "record_table"), "record_table")
+        self.btn_reload       = _require_widget(content.findChild(QToolButton, "btn_reload"), "btn_reload")
         self._btn_copy         = _require_widget(content.findChild(QPushButton, "btn_copy"), "btn_copy")
-        self._btn_delete_last  = _require_widget(content.findChild(QToolButton, "btn_delete_last"), "btn_delete_last")
+        self.btn_delete_last  = _require_widget(content.findChild(QToolButton, "btn_delete_last"), "btn_delete_last")
         self._btn_about        = _require_widget(content.findChild(QPushButton, "btn_about"), "btn_about")
         self._btn_open_csv     = _require_widget(content.findChild(QPushButton, "btn_open_csv"), "btn_open_csv")
         self._btn_settings = _require_widget(content.findChild(QPushButton, "btn_settings"), "btn_settings")
@@ -937,28 +937,28 @@ class MainWindow(QMainWindow):
         self._restore_main_window_pos()          # 恢复上次窗口位置
 
         # ---- 12. 信号连接 ----
-        self._btn_start.clicked.connect(self._on_start)
-        self._btn_stop.clicked.connect(self._on_stop)
+        self.btn_start.clicked.connect(self._on_start)
+        self.btn_stop.clicked.connect(self._on_stop)
         # 手动按钮用 lambda 固定传参 'win'（左）或 'lose'（右），语义随 _stage 变化
         self._btn_manual_win.clicked.connect(lambda: self._manual_step_clicked("win"))
         self._btn_manual_lose.clicked.connect(lambda: self._manual_step_clicked("lose"))
         self._btn_undo.clicked.connect(self._on_undo)
         self._btn_lock_deck.clicked.connect(self._on_toggle_deck_lock)
-        self._btn_reload.clicked.connect(self._on_load_data)
+        self.btn_reload.clicked.connect(self._on_load_data)
         self._btn_rank_stats.clicked.connect(self._open_rank_stats)
 
         # QToolButton MenuButtonPopup 模式：左侧点击加载数据，右侧箭头弹出菜单
-        reload_menu = QMenu(self._btn_reload)
+        reload_menu = QMenu(self.btn_reload)
         reload_menu.addAction("备份数据", self._on_backup_data)
         reload_menu.addAction("新建数据", self._on_new_data)
-        self._btn_reload.setMenu(reload_menu)
+        self.btn_reload.setMenu(reload_menu)
         self._btn_copy.clicked.connect(self._copy_to_clipboard)
-        self._btn_delete_last.clicked.connect(self._on_delete_last)
+        self.btn_delete_last.clicked.connect(self._on_delete_last)
 
         # QToolButton MenuButtonPopup 模式：左侧点击删除最后记录，右侧箭头弹出菜单
-        del_menu = QMenu(self._btn_delete_last)
+        del_menu = QMenu(self.btn_delete_last)
         del_menu.addAction("删除全部记录", self._on_delete_all_records)
-        self._btn_delete_last.setMenu(del_menu)
+        self.btn_delete_last.setMenu(del_menu)
         self._btn_about.clicked.connect(self._on_about)
         self._btn_open_csv.clicked.connect(self._open_csv_dir)
         self._btn_settings.clicked.connect(self._on_settings)
@@ -971,20 +971,20 @@ class MainWindow(QMainWindow):
 
         # ---- 14. 表格配置 ----
         # 统计表格: 只读，整行选中
-        self._stats_table.setColumnCount(len(STATS_COLUMNS))
-        self._stats_table.setHorizontalHeaderLabels(STATS_COLUMNS)
-        self._stats_table.horizontalHeader().setStretchLastSection(True)  # 最后一列自动填充
-        self._stats_table.verticalHeader().setDefaultSectionSize(28)      # 行高 28px
+        self.stats_table.setColumnCount(len(STATS_COLUMNS))
+        self.stats_table.setHorizontalHeaderLabels(STATS_COLUMNS)
+        self.stats_table.horizontalHeader().setStretchLastSection(True)  # 最后一列自动填充
+        self.stats_table.verticalHeader().setDefaultSectionSize(28)      # 行高 28px
 
         # 记录表格: 可编辑，整行选中
-        self._record_table.setColumnCount(len(RECORD_COLUMNS))
-        self._record_table.setHorizontalHeaderLabels(RECORD_COLUMNS)
-        self._record_table.setColumnHidden(0, True)        # 序号列不出现在界面中
-        self._record_table.horizontalHeader().setStretchLastSection(True)
-        self._record_table.verticalHeader().setDefaultSectionSize(28)
+        self.record_table.setColumnCount(len(RECORD_COLUMNS))
+        self.record_table.setHorizontalHeaderLabels(RECORD_COLUMNS)
+        self.record_table.setColumnHidden(0, True)        # 序号列不出现在界面中
+        self.record_table.horizontalHeader().setStretchLastSection(True)
+        self.record_table.verticalHeader().setDefaultSectionSize(28)
 
         # 给横/竖表头设 objectName，QSS 可以区分贴不同的背景图
-        for table in (self._stats_table, self._record_table):
+        for table in (self.stats_table, self.record_table):
             table.horizontalHeader().setObjectName("horizontalHeader")
             table.verticalHeader().setObjectName("verticalHeader")
 
@@ -993,25 +993,25 @@ class MainWindow(QMainWindow):
         init_rank_icons(22)
         rank_colors = self._tm.colors
         # 列4: 己方段位（图标缩略图 + 段位名）
-        self._rank_delegate_player = RankIconDelegate(self._record_table, colors=rank_colors)
-        self._record_table.setItemDelegateForColumn(4, self._rank_delegate_player)
+        self._rank_delegate_player = RankIconDelegate(self.record_table, colors=rank_colors)
+        self.record_table.setItemDelegateForColumn(4, self._rank_delegate_player)
         # 列6: 对方段位（图标缩略图 + 段位名）
-        self._rank_delegate_opponent = RankIconDelegate(self._record_table, colors=rank_colors)
-        self._record_table.setItemDelegateForColumn(6, self._rank_delegate_opponent)
+        self._rank_delegate_opponent = RankIconDelegate(self.record_table, colors=rank_colors)
+        self.record_table.setItemDelegateForColumn(6, self._rank_delegate_opponent)
         # 列7: 赢硬币 (是/否)
-        self._record_table.setItemDelegateForColumn(7, ComboDelegate(["是", "否"], self._record_table))
+        self.record_table.setItemDelegateForColumn(7, ComboDelegate(["是", "否"], self.record_table))
         # 列8: 先后攻 (先攻/后攻)
-        self._record_table.setItemDelegateForColumn(8, ComboDelegate(["先攻", "后攻"], self._record_table))
+        self.record_table.setItemDelegateForColumn(8, ComboDelegate(["先攻", "后攻"], self.record_table))
         # 列9: 结果 (胜/负)
-        self._record_table.setItemDelegateForColumn(9, ComboDelegate(["胜", "负"], self._record_table))
+        self.record_table.setItemDelegateForColumn(9, ComboDelegate(["胜", "负"], self.record_table))
         # 列10: 段位升降 (升段/降段/空白=普通局)
-        self._record_table.setItemDelegateForColumn(10, ComboDelegate(["升段", "降段", ""], self._record_table))
+        self.record_table.setItemDelegateForColumn(10, ComboDelegate(["升段", "降段", ""], self.record_table))
         # 列6: 对方卡组 (可编辑下拉 — 预设值来自 config.toml)
         opponent_presets: list[str] = self._config.get("opponent_decks", {}).get("presets", [])
-        self._record_table.setItemDelegateForColumn(5, EditableComboDelegate(opponent_presets, self._record_table))
+        self.record_table.setItemDelegateForColumn(5, EditableComboDelegate(opponent_presets, self.record_table))
 
         # ---- 16. 记录表格编辑 → CSV 同步 ----
-        self._record_table.cellChanged.connect(self._on_record_cell_changed)
+        self.record_table.cellChanged.connect(self._on_record_cell_changed)
 
         # QSplitter 分割比例：首次运行用默认值，后续从 .app_state.toml 恢复
         self._splitter.setStretchFactor(0, 2)
@@ -1019,7 +1019,7 @@ class MainWindow(QMainWindow):
         self._splitter.setSizes(read_app_state()["splitter"])
 
         # ---- 17. 状态栏（从 .ui 文件加载的控件） ----
-        self._status_frame = _require_widget(content.findChild(QFrame, "customStatusBar"), "customStatusBar")
+        self.status_frame = _require_widget(content.findChild(QFrame, "customStatusBar"), "customStatusBar")
         self._status_label = _require_widget(content.findChild(QLabel, "statusMessage"), "statusMessage")
         self._info_label   = _require_widget(content.findChild(QLabel, "infoLabel"), "infoLabel")
 
@@ -1031,28 +1031,15 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(200, self._update_info_label)  # 首次更新延迟200ms，让窗口先渲染
 
         # ---- 19. 初始化手动按钮样式 ----
-        self._update_manual_buttons()            # 阶段0: 橙色"赢硬币/输硬币"
-        self._btn_start.setStyleSheet(            # 启动按钮单独样式（绿色，稍大）
+        self.update_manual_buttons()            # 阶段0: 橙色"赢硬币/输硬币"
+        self.btn_start.setStyleSheet(            # 启动按钮单独样式（绿色，稍大）
             self._tm.make_button_style(self._theme_colors()["start_bg"], padding="6px 20px")
         )
 
         # ---- 20. 构建主题控件引用容器（传给 ThemeManager） ----
-        self._theme_widgets = ThemeWidgets(
-            stats_table=self._stats_table,
-            record_table=self._record_table,
-            btn_start=self._btn_start,
-            btn_stop=self._btn_stop,
-            btn_delete_last=self._btn_delete_last,
-            btn_reload=self._btn_reload,
-            title_bar=self._title_bar,
-            status_frame=self._status_frame,
-            content=self._content,
-            refresh_stats_table=self._refresh_stats_table,
-            refresh_record_table=self._refresh_record_table,
-            update_manual_buttons=self._update_manual_buttons,
-        )
 
-        # ---- 21. 控件调色板（需要 _theme_widgets 构建后才能调用） ----
+
+        # ---- 21. 控件调色板 ----
         self._apply_table_viewport_palette()
         self._apply_static_button_palette()
 
@@ -1279,12 +1266,12 @@ class MainWindow(QMainWindow):
         self._show_status("正在等待 Master Duel 启动…")
 
         # 将启动按钮改为"终止等待"按钮
-        self._btn_start.setText("终止等待")
-        self._btn_start.setStyleSheet(
+        self.btn_start.setText("终止等待")
+        self.btn_start.setStyleSheet(
             self._tm.make_button_style(self._theme_colors()["warning_bg"], padding="6px 20px")
         )
-        self._btn_start.setEnabled(True)
-        self._btn_stop.setEnabled(False)
+        self.btn_start.setEnabled(True)
+        self.btn_stop.setEnabled(False)
         self._disable_bottom_buttons()
 
         # 启动定时器，每 2 秒检测一次游戏窗口是否出现
@@ -1307,9 +1294,9 @@ class MainWindow(QMainWindow):
         if self._wait_timer is not None:
             self._wait_timer.stop()
             self._wait_timer = None
-        self._btn_start.setText("启动")
+        self.btn_start.setText("启动")
         colors = self._theme_colors()
-        self._btn_start.setStyleSheet(self._tm.make_button_style(colors["start_bg"], padding="6px 20px"))
+        self.btn_start.setStyleSheet(self._tm.make_button_style(colors["start_bg"], padding="6px 20px"))
         self._enable_bottom_buttons()
 
     def _start_worker(self) -> None:
@@ -1352,11 +1339,11 @@ class MainWindow(QMainWindow):
         self._snapshot_ctrl.sync_hotkeys()
 
         # 更新 UI 状态: 禁用启动、启用停止、锁定卡组、禁用危险按钮
-        self._btn_start.setEnabled(False)
-        self._btn_stop.setEnabled(True)
+        self.btn_start.setEnabled(False)
+        self.btn_stop.setEnabled(True)
         self._lock_deck()
         self._disable_bottom_buttons()
-        self._update_manual_buttons()
+        self.update_manual_buttons()
         if self._float_window is not None:
             self._float_window.set_running(True)
 
@@ -1391,8 +1378,8 @@ class MainWindow(QMainWindow):
 
         self._snapshot_ctrl.unregister_hotkeys()
         self._reset_stage()                      # 重置状态机
-        self._btn_start.setEnabled(True)
-        self._btn_stop.setEnabled(False)
+        self.btn_start.setEnabled(True)
+        self.btn_stop.setEnabled(False)
         self._unlock_deck()
         self._enable_bottom_buttons()
         if self._float_window is not None:
@@ -1414,8 +1401,8 @@ class MainWindow(QMainWindow):
         _log.write("STATUS", msg)
         self._show_status(msg)
         if msg.startswith("程序已关闭"):
-            self._btn_start.setEnabled(True)
-            self._btn_stop.setEnabled(False)
+            self.btn_start.setEnabled(True)
+            self.btn_stop.setEnabled(False)
             self._unlock_deck()
             self._enable_bottom_buttons()
 
@@ -1427,7 +1414,7 @@ class MainWindow(QMainWindow):
         """
         if not self._match.advance_coin(coin_win):
             return
-        self._update_manual_buttons()
+        self.update_manual_buttons()
 
     def _on_rank_detected(self, rank: str) -> None:
         """自动识别到段位升降 → 缓存结果。
@@ -1544,7 +1531,7 @@ class MainWindow(QMainWindow):
         # 段位图标已消失，通知 RankWorker 停止搜索
         if self._rank_worker is not None:
             self._rank_worker.stop_searching()
-        self._update_manual_buttons()
+        self.update_manual_buttons()
         turn_text = "先攻" if turn == "first" else "后攻"
         self._show_status(f"已识别: {turn_text} — 等待胜负…")
 
@@ -1660,7 +1647,7 @@ class MainWindow(QMainWindow):
         if self._match.stage == 0:
             # 阶段0: 选择赢硬币/输硬币
             self._match.manual_step(side)
-            self._update_manual_buttons()
+            self.update_manual_buttons()
             self._sync_worker_stage()
             coin_text = "赢硬币" if side == "win" else "输硬币"
             self._show_status(f"手动: {coin_text} — 请选择先后攻")
@@ -1668,7 +1655,7 @@ class MainWindow(QMainWindow):
         elif self._match.stage == 1:
             # 阶段1: 选择先攻/后攻
             _, turn = self._match.manual_step(side)
-            self._update_manual_buttons()
+            self.update_manual_buttons()
             self._sync_worker_stage()
             turn_text = "先攻" if turn == "first" else "后攻"
             self._show_status(f"手动: {turn_text} — 请选择胜负")
@@ -1748,7 +1735,7 @@ class MainWindow(QMainWindow):
     def _on_undo(self) -> None:
         """撤销上一阶段的选择，逐级回退并同步 worker。"""
         stage = self._match.undo()
-        self._update_manual_buttons()
+        self.update_manual_buttons()
         self._sync_worker_stage()
         label = {0: "硬币", 1: "先后攻"}[stage]
         self._show_status(f"已撤销到: {label}")
@@ -1767,7 +1754,7 @@ class MainWindow(QMainWindow):
         self._match.reset()
         self._rank_icon_result = None
         self._notifying = False              # 防重入标志复位
-        self._update_manual_buttons()
+        self.update_manual_buttons()
 
     def _update_manual_buttons(self) -> None:
         """根据当前 _stage 更新手动按钮的文字、颜色及撤销按钮可见性。
@@ -1805,8 +1792,8 @@ class MainWindow(QMainWindow):
 
     def _reload_tables(self) -> None:
         """重新加载 CSV 数据并刷新两个表格（统计 + 记录）。"""
-        self._refresh_stats_table()
-        self._refresh_record_table()
+        self.refresh_stats_table()
+        self.refresh_record_table()
         # 表格填充后即恢复列宽，不依赖 QTimer 时序，调用幂等无副作用
         self._restore_column_widths()
 
@@ -1824,11 +1811,11 @@ class MainWindow(QMainWindow):
         selected = self._config.get("stats", {}).get("columns")
         columns = selected if selected else list(STATS_COLUMNS)
 
-        self._stats_table.setColumnCount(len(columns))
-        self._stats_table.setHorizontalHeaderLabels(columns)
+        self.stats_table.setColumnCount(len(columns))
+        self.stats_table.setHorizontalHeaderLabels(columns)
 
-        self._stats_table.setUpdatesEnabled(False)  # 暂停重绘
-        self._stats_table.setRowCount(len(stats))
+        self.stats_table.setUpdatesEnabled(False)  # 暂停重绘
+        self.stats_table.setRowCount(len(stats))
         for row_idx, row_data in enumerate(stats):
             for col_idx, col_name in enumerate(columns):
                 value = row_data.get(col_name, "")
@@ -1841,9 +1828,9 @@ class MainWindow(QMainWindow):
                     font.setBold(True)
                     item.setFont(font)
 
-                self._stats_table.setItem(row_idx, col_idx, item)
+                self.stats_table.setItem(row_idx, col_idx, item)
 
-        self._stats_table.setUpdatesEnabled(True)   # 恢复重绘
+        self.stats_table.setUpdatesEnabled(True)   # 恢复重绘
         self._refresh_float_window()         # 悬浮窗也更新
 
     def _refresh_record_table(self) -> None:
@@ -1855,10 +1842,10 @@ class MainWindow(QMainWindow):
         刷新后自动滚动到顶部（最新记录）。
         """
         self._suppress_cell_changed = True   # 抑制 cellChanged → 防止误写 CSV
-        self._record_table.setUpdatesEnabled(False)  # 暂停重绘，批量填充完再刷新
+        self.record_table.setUpdatesEnabled(False)  # 暂停重绘，批量填充完再刷新
 
         records = load_records()
-        self._record_table.setRowCount(len(records))
+        self.record_table.setRowCount(len(records))
         for row_idx, rec in enumerate(reversed(records)):
             for col_idx, col_name in enumerate(RECORD_COLUMNS):
                 value = rec.get(col_name, "")
@@ -1869,12 +1856,12 @@ class MainWindow(QMainWindow):
                 if col_idx in (0, 1, 2):
                     item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
 
-                self._record_table.setItem(row_idx, col_idx, item)
+                self.record_table.setItem(row_idx, col_idx, item)
 
         if records:
-            self._record_table.scrollToTop() # 滚动到最新记录
+            self.record_table.scrollToTop() # 滚动到最新记录
 
-        self._record_table.setUpdatesEnabled(True)   # 恢复重绘，一次性刷新
+        self.record_table.setUpdatesEnabled(True)   # 恢复重绘，一次性刷新
         self._suppress_cell_changed = False
 
     def _on_record_cell_changed(self, row: int, col: int) -> None:
@@ -1888,13 +1875,13 @@ class MainWindow(QMainWindow):
         if col in (0, 1, 2):                # 序号/日期/时间不可编辑
             return
 
-        item = self._record_table.item(row, col)
+        item = self.record_table.item(row, col)
         if item is None:
             return
         new_value = item.text().strip()
 
         # 通过序号列定位记录
-        seq_item = self._record_table.item(row, 0)
+        seq_item = self.record_table.item(row, 0)
         if seq_item is None:
             return
         seq = seq_item.text().strip()
@@ -1914,7 +1901,7 @@ class MainWindow(QMainWindow):
             if not save_records(records):        # 全量写回
                 self._show_status("修改失败 — CSV 文件被占用，请关闭 WPS/Excel 后重试")
                 return
-            self._refresh_stats_table()      # 刷新统计
+            self.refresh_stats_table()      # 刷新统计
 
     # =========================================================================
     # 删除最后记录
@@ -2331,7 +2318,7 @@ class MainWindow(QMainWindow):
 
         # 对方卡组预设更新（列5 = 对方卡组）
         new_presets = self._config.get("opponent_decks", {}).get("presets", [])
-        self._record_table.setItemDelegateForColumn(5, EditableComboDelegate(new_presets, self._record_table))
+        self.record_table.setItemDelegateForColumn(5, EditableComboDelegate(new_presets, self.record_table))
 
         # Worker 正在运行 → 停止后用新配置重启
         worker_was_running = self._worker is not None
@@ -2446,7 +2433,7 @@ class MainWindow(QMainWindow):
         saved = read_app_state()
 
         defaults_map = APP_STATE_DEFAULTS
-        for table, key in [(self._stats_table, "stats"), (self._record_table, "record")]:
+        for table, key in [(self.stats_table, "stats"), (self.record_table, "record")]:
             defaults: list[int] = defaults_map[key]
             widths = saved.get(key, [])
             # record 表跳过多余的列 0（旧格式曾保存隐藏列"序号"的宽度 0）
@@ -2467,7 +2454,7 @@ class MainWindow(QMainWindow):
         record 表额外跳过列 0（序号，始终隐藏，不持久化）。
         """
         data = read_app_state()
-        for table, key in [(self._stats_table, "stats"), (self._record_table, "record")]:
+        for table, key in [(self.stats_table, "stats"), (self.record_table, "record")]:
             if key == "record":
                 data[key] = [table.columnWidth(c) for c in range(1, table.columnCount() - 1)]
             else:
@@ -2535,10 +2522,10 @@ class MainWindow(QMainWindow):
             fp = self._float_window.pos()
             data["float_pos"] = [fp.x(), fp.y()]
         # 保存列宽（跳过 stats 最后一列 stretch、record 列0隐藏列和最后一列 stretch）
-        data["stats"] = [self._stats_table.columnWidth(c)
-                         for c in range(self._stats_table.columnCount() - 1)]
-        data["record"] = [self._record_table.columnWidth(c)
-                          for c in range(1, self._record_table.columnCount() - 1)]
+        data["stats"] = [self.stats_table.columnWidth(c)
+                         for c in range(self.stats_table.columnCount() - 1)]
+        data["record"] = [self.record_table.columnWidth(c)
+                          for c in range(1, self.record_table.columnCount() - 1)]
         data["splitter"] = self._splitter.sizes()
         write_app_state(data)
 
