@@ -576,18 +576,6 @@ _rank_icon_cache: dict[str, tuple[np.ndarray, np.ndarray]] = {}
 # 没有等级数字的段位（不触发 _detect_tier_number）
 _NO_TIER_RANKS = {"巅峰"}
 
-# 各分辨率下段位图标的实测像素尺寸，用于首轮检测时收窄搜索范围。
-# 未知分辨率走全范围搜索（无性能损失），未知分辨率首轮检测后自动
-# 缓存实际尺寸，后续检测走缓存路径（同样零开销）。
-_EXPECTED_ICON_SIZE: dict[str, int] = {
-    "1280x720": 38,
-    "1366x768": 40,
-    "1600x900": 48,
-    "1920x1080": 55,
-    "2560x1440": 75,
-    "3840x2160": 110,
-}
-
 # 预合成模板缓存：{(图标名, 尺寸(px), 背景B, 背景G, 背景R): BGR模板}
 # 避免每次检测都重新合成模板（合成涉及 resize + alpha 混合，较慢）
 _composite_cache: dict[tuple, np.ndarray] = {}
@@ -774,7 +762,6 @@ def _match_icon_at_sizes(
 def _detect_rank_in_roi(
     screenshot: np.ndarray, roi_x: int, roi_y: int, roi_w: int, roi_h: int,
     bg_color: np.ndarray, threshold: float = 0.7,
-    expected_size: int = 0,
 ) -> tuple[str | None, float, int, int, int, int, dict[str, float]]:
     """在截图的指定 ROI 内搜索最佳段位图标。
 
@@ -797,7 +784,6 @@ def _detect_rank_in_roi(
         roi_x, roi_y, roi_w, roi_h: ROI 区域
         bg_color: 采样背景色
         threshold: 匹配置信度阈值
-        expected_size: 预期图标尺寸（px），0 表示未知。用于收窄阶段 1 搜索范围。
 
     Returns:
         (图标名 | None, 最高分数, best_x, best_y, best_w, best_h, all_scores)
@@ -807,17 +793,9 @@ def _detect_rank_in_roi(
     roi = screenshot[roi_y:roi_y + roi_h, roi_x:roi_x + roi_w]
     img_w = screenshot.shape[1]
 
-    # 尺寸搜索范围
+    # 尺寸搜索范围（与 1.10.3 一致，锚定阶段负责加速）
     min_sz = max(20, img_w // 25)
     max_sz = min(img_w // 5, roi_h, roi_w // 2)
-
-    # 有预期尺寸时以预期值为中心收窄，避免 img_w // 25 钳住下限
-    # 例：缩略图(600px)上图标约 18px，但 img_w // 25 = 24，
-    #     max(min_sz, ...) 会把下限锁在 24，完全错过 18。
-    if expected_size > 0:
-        half = max(12, int(expected_size * 0.5))
-        min_sz = max(10, expected_size - half)
-        max_sz = min(max_sz, expected_size + half)
 
     all_scores: dict[str, float] = {}
 
@@ -829,12 +807,14 @@ def _detect_rank_in_roi(
     # 所有段位图标的实际渲染尺寸。
     PIN_ICONS = ("img_rankicon_04", "img_rankicon_06")  # 黄金、钻石
     best_size = 0
+    best_pin_score = 0.0
     for name in PIN_ICONS:
         if name not in _rank_icon_cache:
             continue
         nm, sc, bx, by, bw, bh = _match_icon_at_sizes(
             roi, name, range(min_sz, max_sz, 12), bg_color, roi_x, roi_y)
-        if bw > best_size:
+        if sc > best_pin_score:
+            best_pin_score = sc
             best_size = bw
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1183,13 +1163,9 @@ def detect_rank_icon(
             name, score, rx, ry, rw = best_name, best_score, best_x, best_y, best_w
         else:
             # ===== 首次检测：缩略图粗搜 → 映射 → 原图精搜修正 =====
-            # 查分辨率预估表，收窄尺寸搜索范围（未知分辨率 → 0，走全范围）
-            res_key = f"{w}x{h}"
-            exp = _EXPECTED_ICON_SIZE.get(res_key, 0)
-            exp_small = int(exp * scale) if exp else 0
             name, score, fx, fy, fw, fh, side_scores = _detect_rank_in_roi(
                 small, sx, 0, small_roi_w, small_roi_h,
-                bg_color, threshold, expected_size=exp_small,
+                bg_color, threshold,
             )
             if name is None:
                 _last_rank_icon_all_scores[side] = side_scores
