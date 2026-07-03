@@ -1076,8 +1076,6 @@ class ConfigDialog(_BaseFramelessDialog):
         lo.addLayout(compact_row)
         self._show_status_cb.toggled.connect(
             lambda on: self._set_sub_disabled(self._show_status_compact_cb, not on))
-        self._show_status_cb.toggled.connect(
-            lambda on: not on and self._show_status_compact_cb.setChecked(False))
 
         return w
 
