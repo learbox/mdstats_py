@@ -784,19 +784,9 @@ def _detect_rank_in_roi(
 ) -> tuple[str | None, float, int, int, int, int, dict[str, float]]:
     """在截图的指定 ROI 内搜索最佳段位图标。
 
-    三阶段策略（自 1.11 起优化）：
-
-    ── 阶段 1「锚定尺寸」──
-    所有段位图标在游戏中渲染为同一像素尺寸。用 2 个特征最明显的
-    锚定图标（黄金、钻石）快速粗搜全尺寸范围 → 确定最佳尺寸。
-    避免 8 个图标各自遍历一遍全尺寸范围（省 ~65% 匹配次数）。
-
-    ── 阶段 2「统一精搜」──
-    全部图标在最佳尺寸 ±8px 范围以步长 2px 精搜。高置信度（≥0.95）
-    时提前终止，不再匹配剩余图标。
-
-    ── 阶段 3「兜底」──
-    锚定图标全部缺失时回退到旧算法（逐图标粗搜+精搜），保证鲁棒性。
+    与 1.10.3 算法逻辑一致，仅在粗搜阶段引入并行加速：
+    8 个图标同时提交到线程池做粗搜（步长 12px），
+    最佳图标再做精搜（±10px，步长 2px）。高置信度（≥0.95）时提前终止。
 
     Args:
         screenshot: 完整截图（BGR）
@@ -812,124 +802,53 @@ def _detect_rank_in_roi(
     roi = screenshot[roi_y:roi_y + roi_h, roi_x:roi_x + roi_w]
     img_w = screenshot.shape[1]
 
-    # 尺寸搜索范围（与 1.10.3 一致，锚定阶段负责加速）
+    # 尺寸搜索范围（与 1.10.3 一致）
     min_sz = max(20, img_w // 25)
     max_sz = min(img_w // 5, roi_h, roi_w // 2)
 
     all_scores: dict[str, float] = {}
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # 阶段 1 — 锚定尺寸
+    # 粗搜（并行）：8 个图标在全尺寸范围做第一轮匹配，步长 12px
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # 问题：8 张段位图标源素材都是 290×290，但游戏里它们实际渲染的像素
-    #       尺寸取决于分辨率（1080p≈55px、4K≈110px 等）。不知道真实尺寸
-    #       就没法精确匹配。
-    #
-    # 解法：所有段位图标在同一个分辨率下渲染尺寸完全相同（都是正方形、
-    #       同一像素大小）。所以只需要知道"任意一个图标是多大"，就等于
-    #       知道了全部 8 个的大小。
-    #
-    # 为什么选黄金(04)和钻石(06)当"量尺"？
-    #   - 颜色特征丰富（黄金=黄橙渐变、钻石=蓝白高光），高频纹理在错误
-    #     尺寸下 NCC 分数骤降，峰值尖锐 → 尺寸定位准确
-    #   - 出现频率高，覆盖大多数玩家的实际段位区间
-    #   - 选 2 个而不是 1 个：万一用户缺少某个图标文件，另一个顶上
-    #
-    # 怎么做：2 个锚定图标在整个尺寸范围（24~100px，步长 12）粗搜。
-    #         取两者中最高匹配分对应的尺寸 → best_size。
-    #         注意：取最高分对应的尺寸（sc > best_pin_score），而不是
-    #         最大尺寸（bw > best_size）。后者会被噪声在高尺寸的虚高
-    #         分数误导。
-    #
-    # 为什么比旧算法快？
-    #   旧：8 个图标 × 逐个尺寸粗搜 → 再精搜最佳图标
-    #   新：2 个图标粗搜定尺寸 → 8 个图标在最佳尺寸并行精搜
-    #   粗搜从 8 次降到 2 次，省 75%。
-    PIN_ICONS = ("img_rankicon_04", "img_rankicon_06")  # 黄金、钻石
-    best_size = 0
-    best_pin_score = 0.0
-    for name in PIN_ICONS:
-        if name not in _rank_icon_cache:        # 该图标文件缺失，跳过
-            continue
-        nm, sc, bx, by, bw, bh = _match_icon_at_sizes(
-            roi, name, range(min_sz, max_sz, 12), bg_color, roi_x, roi_y)
-        if sc > best_pin_score:                 # 取最高分对应的尺寸
-            best_pin_score = sc
-            best_size = bw
-
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # 兜底：锚定图标全部缺失时回退到旧算法
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # 正常情况下锚定图标总会匹配到某个尺寸（best_size > 0）。
-    # 但如果用户删掉了黄金和钻石的源素材文件，best_size 始终为 0，
-    # 就需要走和 1.10.3 完全一样的逐图标粗搜+精搜逻辑作为保险。
-    # 这种情况几乎不可能发生（谁没事删源文件），但保留兜底保证鲁棒性。
-    if best_size == 0:
-        best_name, best_score = "", 0.0
-        best_x = best_y = best_w = 0
-        for name in _RANK_LABELS:
-            nm, sc, bx, by, bw, bh = _match_icon_at_sizes(
-                roi, name, range(min_sz, max_sz, 12), bg_color, roi_x, roi_y)
-            all_scores[name] = sc
-            if sc > best_score:
-                best_name, best_score = nm, sc
-                best_x, best_y, best_w = bx, by, bw
-            if best_name == name and best_score > 0.5:
-                fine_start = max(min_sz, best_w - 10)
-                fine_end = min(max_sz, best_w + 12)
-                nm, sc, bx, by, bw, bh = _match_icon_at_sizes(
-                    roi, name, range(fine_start, fine_end, 2), bg_color, roi_x, roi_y)
-                all_scores[name] = max(all_scores[name], sc)
-                if sc > best_score:
-                    best_name, best_score = nm, sc
-                    best_x, best_y, best_w = bx, by, bw
-        if best_score < threshold or best_name in ("", None):
-            return None, best_score, 0, 0, 0, 0, all_scores
-        return best_name, best_score, best_x, best_y, best_w, best_w, all_scores
-
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # 阶段 2 — 并行精搜
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # 此时已通过锚定图标确定了最佳尺寸（best_size），接下来搜的是：
-    # "在这个尺寸下，8 个图标里哪个匹配分最高？"
-    #
-    # 尺寸范围：best_size ±8px，步长 2px（约 9 个候选尺寸）
-    # 8 个图标 × 9 个尺寸 = 72 次 matchTemplate
-    #
-    # 为什么并行？
-    #   每个图标独立——新手模板只和新手比、钻石模板只和钻石比，互不依赖。
-    #   72 次匹配全部扔进线程池，4 个工人同时跑。
-    #
-    # as_completed() 的作用：
-    #   普通的 parallel() 要等所有任务完成后才返回结果。
-    #   as_completed() 不同：哪个任务先算完就先处理哪个，不干等慢的。
-    #   如果第一个返回的图标就 ≥0.95（几乎确定找对了），直接 break 不等剩余的。
-    fine_start = max(min_sz, best_size - 8)
-    fine_end = min(max_sz, best_size + 10)
-    sz_range = range(fine_start, fine_end, 2)
-
+    # 8 个图标互不依赖——新手模板只和新手比、钻石只和钻石比。
+    # 全部提交到线程池并行执行，哪个先算完先处理。
+    # 如果某个图标 ≥0.95 说明几乎确定就是它，直接 break 不等剩余的。
     executor = _get_executor()
-    futures = {}                       # {Future: 图标名}，把任务和图标对应起来
-    for name in _RANK_LABELS:          # 遍历 8 个图标（新手~巅峰）
-        f = executor.submit(            # 提交任务，不阻塞，立刻返回一个 Future
-            _match_icon_at_sizes,       # 要在线程里执行的函数
-            roi, name, sz_range,        # 前 3 个参数
-            bg_color, roi_x, roi_y)     # 后 3 个参数
-        futures[f] = name               # 记住：这个 Future 对应哪个图标
+    futures = {}
+    for name in _RANK_LABELS:
+        f = executor.submit(
+            _match_icon_at_sizes,
+            roi, name, range(min_sz, max_sz, 12), bg_color, roi_x, roi_y)
+        futures[f] = name
 
     best_name, best_score = "", 0.0
     best_x = best_y = best_w = 0
-    for f in as_completed(futures):     # 谁先算完就先处理谁
-        name = futures[f]                # 查出是哪个图标
-        nm, sc, bx, by, bw, bh = f.result()  # 取结果（已完成，不阻塞）
+    for f in as_completed(futures):
+        name = futures[f]
+        nm, sc, bx, by, bw, bh = f.result()
         all_scores[name] = sc
         if sc > best_score:
             best_name, best_score = nm, sc
             best_x, best_y, best_w = bx, by, bw
-            # 早停：NCC ≥ 0.95 意味着模板和截图像素几乎完全一致，
-            # 基本不可能有另一个图标匹配得更好，不再等剩余任务。
+            # NCC ≥ 0.95 几乎确定就是正确段位，不等剩余图标
             if best_score >= 0.95:
                 break
+
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 精搜（串行）：对粗搜最佳图标做 ±10px 步长 2px 精细匹配
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 与 1.10.3 逻辑一致——只对粗搜分数最高的图标做精搜。
+    # 粗搜最佳分数 ≤ 0.5 说明没有明显匹配，跳过精搜。
+    if best_score > 0.5 and best_name:
+        fine_start = max(min_sz, best_w - 10)
+        fine_end = min(max_sz, best_w + 12)
+        nm, sc, bx, by, bw, bh = _match_icon_at_sizes(
+            roi, best_name, range(fine_start, fine_end, 2), bg_color, roi_x, roi_y)
+        all_scores[best_name] = max(all_scores[best_name], sc)
+        if sc > best_score:
+            best_name, best_score = nm, sc
+            best_x, best_y, best_w = bx, by, bw
 
     if best_score < threshold or best_name in ("", None):
         return None, best_score, 0, 0, 0, 0, all_scores
