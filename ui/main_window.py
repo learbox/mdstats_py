@@ -2345,6 +2345,7 @@ class MainWindow(QMainWindow):
             QThread.msleep(50)
         if worker_was_running:
             self._start_worker()
+        self._reload_tables()
         self._show_status(
             "配置已重新载入" + (" 并重启识别" if worker_was_running else "")
         )
