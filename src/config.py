@@ -42,6 +42,32 @@
     font_family = "Microsoft YaHei, -apple-system, sans-serif"
     rows = []                     # 悬浮窗数据行（空=默认 8 项）
 
+    [stats]
+    columns = []                  # 统计表格显示的列名列表（空=全部显示）
+
+    [debug]
+    save_screenshots = false      # 检测到关键事件时保存截图到 screenshots/
+    auto_clear_screenshots = true #   下一局开始时自动清除上一局截图
+    hotkey_enabled = false        # 启用截图热键（全局，游戏全屏时也可用）
+    snapshot_hotkey = "Ctrl+Shift+S"  # 单次截图热键
+    periodic_hotkey = "Ctrl+Shift+D"  # 周期截图热键（按一下开，再按停）
+    periodic_interval = 0.5       #   周期截图间隔（秒）
+    log_mode = false              # 日志模式：将运行信息写入 logs/ 目录
+    log_scope = ["status", "screenshots", "errors"]  # 日志记录范围
+    show_confidence = false       # 状态栏显示匹配置信度
+    save_failure_samples = false  # 识别失败时保存诊断截图+数据
+    failure_sample_offset = 0.10  #   诊断触发偏移量
+
+    [notification]
+    enabled = false               # 对局结束时弹出系统气泡通知
+    duration = 5                  # 通知显示时长（秒）
+    minimize_to_tray = false      # 关闭时隐藏到系统托盘
+
+    [rank_detection]
+    enabled = true                # 是否启用段位图标检测
+    interval = 0.5                # 截图间隔（秒），0.3 ~ 1.0
+    confidence_threshold = 0.7    # 匹配置信度阈值 (0.0~1.0)
+
 """
 
 import sys
