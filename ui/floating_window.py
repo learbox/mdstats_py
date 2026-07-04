@@ -86,7 +86,7 @@ _ROW_KEY_MAP: dict[str, tuple[str, ...]] = {
 }
 
 # 默认显示的行（用户未配置 [floating_window].rows 时使用）
-_DEFAULT_ROWS = ("卡组", "对局数", "胜/负/平", "赢/输硬币",
+_DEFAULT_ROWS = ("卡组", "对局数", "胜/负", "赢/输硬币",
                  "赢硬币概率", "赢硬币胜率", "输硬币胜率", "综合胜率")
 
 
