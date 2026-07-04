@@ -27,8 +27,6 @@
 """
 
 
-from __future__ import annotations
-
 import cv2
 from PySide6.QtCore import QThread, Signal
 
