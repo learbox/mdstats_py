@@ -67,7 +67,7 @@ from PySide6.QtWidgets import QGridLayout, QLabel, QMenu, QWidget
 _ROW_KEY_MAP: dict[str, tuple[str, ...]] = {
     "卡组":       ("卡组",),
     "对局数":     ("对局数",),
-    "胜/负":      ("胜", "负"),
+    "胜/负/平":   ("胜", "负", "平"),
     "赢/输硬币":  ("赢硬币次数", "输硬币次数"),
     "综合胜率":   ("胜率",),
     "赢硬币概率": ("赢硬币概率",),
@@ -85,7 +85,7 @@ _ROW_KEY_MAP: dict[str, tuple[str, ...]] = {
 }
 
 # 默认显示的行（用户未配置 [floating_window].rows 时使用）
-_DEFAULT_ROWS = ("卡组", "对局数", "胜/负", "赢/输硬币",
+_DEFAULT_ROWS = ("卡组", "对局数", "胜/负/平", "赢/输硬币",
                  "赢硬币概率", "赢硬币胜率", "输硬币胜率", "综合胜率")
 
 
@@ -107,7 +107,7 @@ class FloatingWindow(QWidget):
     toggle_start_stop = Signal()      # 右键 → "启动" / "停止"
     delete_last_requested = Signal()  # 右键 → "删除最后记录"
     # 三段手动按钮（stage 0/1/2 对应不同语义）
-    manual_action = Signal(str)       # 参数: "win" / "lose" / "undo"
+    manual_action = Signal(str)       # 参数: "win" / "lose" / "draw" / "undo"
 
     _DEFAULT_W = 250
     _DEFAULT_H = 330
@@ -546,6 +546,8 @@ class FloatingWindow(QWidget):
             win_btn.triggered.connect(lambda: self.manual_action.emit("win"))
             lose_btn = menu.addAction("负")
             lose_btn.triggered.connect(lambda: self.manual_action.emit("lose"))
+            draw_btn = menu.addAction("平")
+            draw_btn.triggered.connect(lambda: self.manual_action.emit("draw"))
             menu.addSeparator()
             undo_btn = menu.addAction("撤销")
             undo_btn.triggered.connect(lambda: self.manual_action.emit("undo"))

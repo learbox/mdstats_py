@@ -915,6 +915,9 @@ class MainWindow(QMainWindow):
         self._deck_input       = _require_widget(content.findChild(QLineEdit, "deck_input"), "deck_input")
         self._btn_manual_win   = _require_widget(content.findChild(QPushButton, "btn_manual_win"), "btn_manual_win")
         self._btn_manual_lose  = _require_widget(content.findChild(QPushButton, "btn_manual_lose"), "btn_manual_lose")
+        self._btn_manual_draw  = QPushButton("平")          # 平局按钮，动态创建（.ui 中无此控件）
+        self._btn_manual_draw.hide()
+        self._btn_manual_lose.parentWidget().layout().addWidget(self._btn_manual_draw)
         self._btn_undo         = _require_widget(content.findChild(QPushButton, "btn_undo"), "btn_undo")
         self._btn_lock_deck    = _require_widget(content.findChild(QPushButton, "btn_lock_deck"), "btn_lock_deck")
         self._btn_lock_deck.setText("锁定卡组")  # 初始: 输入框未锁定
@@ -942,6 +945,7 @@ class MainWindow(QMainWindow):
         # 手动按钮用 lambda 固定传参 'win'（左）或 'lose'（右），语义随 _stage 变化
         self._btn_manual_win.clicked.connect(lambda: self._manual_step_clicked("win"))
         self._btn_manual_lose.clicked.connect(lambda: self._manual_step_clicked("lose"))
+        self._btn_manual_draw.clicked.connect(lambda: self._manual_step_clicked("draw"))
         self._btn_undo.clicked.connect(self._on_undo)
         self._btn_lock_deck.clicked.connect(self._on_toggle_deck_lock)
         self.btn_reload.clicked.connect(self._on_load_data)
@@ -1003,7 +1007,7 @@ class MainWindow(QMainWindow):
         # 列8: 先后攻 (先攻/后攻)
         self.record_table.setItemDelegateForColumn(8, ComboDelegate(["先攻", "后攻"], self.record_table))
         # 列9: 结果 (胜/负)
-        self.record_table.setItemDelegateForColumn(9, ComboDelegate(["胜", "负"], self.record_table))
+        self.record_table.setItemDelegateForColumn(9, ComboDelegate(["胜", "负", "平"], self.record_table))
         # 列10: 段位升降 (升段/降段/空白=普通局)
         self.record_table.setItemDelegateForColumn(10, ComboDelegate(["升段", "降段", ""], self.record_table))
         # 列6: 对方卡组 (可编辑下拉 — 预设值来自 config.toml)
@@ -1550,7 +1554,7 @@ class MainWindow(QMainWindow):
         coin_cache = cached["coin"]
         turn_cache = cached["turn"]
         rank_cache = cached["rank"]
-        result_text = "胜" if result == "win" else "负"
+        result_text = {"win": "胜", "lose": "负", "draw": "平"}.get(result, result)
 
         # 段位图标信息：从 RankWorker 缓存取出（如 "铂金 II"、"钻石 I"）
         # _rank_icon_strs() 取后清除缓存，保证同一局不会重复写入
@@ -1676,7 +1680,7 @@ class MainWindow(QMainWindow):
             coin_cache = cached["coin"]
             turn_cache = cached["turn"]
             rank_cache = cached["rank"]
-            result_text = "胜" if side == "win" else "负"
+            result_text = {"win": "胜", "lose": "负", "draw": "平"}.get(side, side)
             self._reset_stage()
             self._sync_worker_stage()
             self._reload_tables()
@@ -1781,6 +1785,14 @@ class MainWindow(QMainWindow):
         self._btn_manual_win.setStyleSheet(self._tm.make_button_style(left_color))
         self._btn_manual_lose.setText(right_text)
         self._btn_manual_lose.setStyleSheet(self._tm.make_button_style(right_color))
+
+        # 平局按钮：仅在阶段 2 显示
+        if self._match.stage == 2:
+            self._btn_manual_draw.show()
+            self._btn_manual_draw.setStyleSheet(
+                self._tm.make_button_style(colors.get("draw", "#9e9e9e")))
+        else:
+            self._btn_manual_draw.hide()
 
         # 同步阶段到悬浮窗（右键菜单根据阶段显示不同按钮）
         if self._float_window is not None:

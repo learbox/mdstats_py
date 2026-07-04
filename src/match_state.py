@@ -68,7 +68,7 @@ class MatchState:
         返回 (new_stage, turn_value):
             阶段0: side = "win"/"lose" → 缓存硬币, 返回 (1, "")
             阶段1: side = "win"→"first" / "lose"→"second", 返回 (2, turn)
-            阶段2: side = "win"/"lose" = 胜负, 返回 (2, side)  # 不推进，由调用方处理
+            阶段2: side = "win"/"lose"/"draw" = 胜负平, 返回 (2, side)  # 不推进，由调用方处理
 
         注意：阶段2的记录写入由 MainWindow 负责，此处不调用 add_record。
         """

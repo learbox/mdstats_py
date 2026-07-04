@@ -118,7 +118,7 @@ class StatsWorker(QThread):
                              与 coin_win_detected 同时触发（同一张截图），
                              独立信号不阻塞状态机；'' = 普通局。
     turn_detected(str)     — 先后攻结果: 'first'（先攻）或 'second'（后攻）
-    result_detected(str)   — 对局结果: 'win'（胜）或 'lose'（负）
+    result_detected(str)   — 对局结果: 'win'（胜）、'lose'（负）、'draw'（平）
 
     信号触发顺序 (每局):
         status_update (持续) → coin_win_detected + rank_detected (同时)
@@ -676,12 +676,13 @@ class StatsWorker(QThread):
                     self._state = "WAITING_RESULT"
 
             elif self._state == "WAITING_RESULT":
-                # 检测胜负（模板：victory.png / defeat.png）
+                # 检测对局结果（模板：victory.png / defeat.png / draw.png）
                 result = _det.detect_result(screenshot, self._threshold)
 
-                # ---- 失败样本记录：胜负（互斥，只保留最佳匹配） ----
+                # ---- 失败样本记录：胜负平（互斥，只保留最佳匹配） ----
                 self._consider_best(
-                    [("result_win", "victory"), ("result_lose", "defeat")],
+                    [("result_win", "victory"), ("result_lose", "defeat"),
+                     ("result_draw", "draw")],
                     _det.get_last_all_scores(), screenshot,
                     self._build_extra_meta())
 
@@ -690,7 +691,7 @@ class StatsWorker(QThread):
                     if self._save_screenshots:
                         self._save_detection_screenshot(screenshot, f"result_{result}")
                     self.result_detected.emit(result)          # 通知主线程写入 CSV
-                    result_text = "胜" if result == "win" else "负"
+                    result_text = {"win": "胜", "lose": "负", "draw": "平"}.get(result, result)
                     result_score = _det.get_last_score()
                     if self._show_confidence:
                         self.status_update.emit(

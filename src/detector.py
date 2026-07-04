@@ -152,7 +152,7 @@ def set_resolution(width: int, height: int) -> None:
     _resolution_subdir = f"{width}x{height}"
 
 
-_REQUIRED_TEMPLATES = ["coin_win", "coin_lose", "go_first", "go_second", "victory", "defeat", "rank_up", "rank_down"]
+_REQUIRED_TEMPLATES = ["coin_win", "coin_lose", "go_first", "go_second", "victory", "defeat", "rank_up", "rank_down", "draw"]
 
 # 最近一次检测的最高匹配分数（供状态栏显示，0.0 = 无检测）
 _last_match_score: float = 0.0
@@ -182,7 +182,7 @@ _last_roi_info: dict[str, object] = {}
 _last_rank_icon_all_scores: dict[str, dict[str, float]] = {}
 
 # 可选模板：缺失时不阻止检测启动，detect_rank() 会自动返回 None
-_OPTIONAL_TEMPLATES = {"rank_up", "rank_down"}
+_OPTIONAL_TEMPLATES = {"rank_up", "rank_down", "draw"}
 
 # 模板内存缓存：init_templates() 预加载后填充，后续 _get_cached_template 直接取用
 # 键为模板名（不含扩展名），值为 numpy 数组或 None（加载失败时）
@@ -413,10 +413,10 @@ def detect_turn(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
 
 
 def detect_result(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
-    """阶段 3 — 检测对局胜负（胜利/失败）。"""
+    """阶段 3 — 检测对局结果（胜利/失败/平局）。"""
     return _detect_with_roi(
-        screenshot, "result", ("victory", "defeat"),
-        {"victory": "win", "defeat": "lose"}, threshold,
+        screenshot, "result", ("victory", "defeat", "draw"),
+        {"victory": "win", "defeat": "lose", "draw": "draw"}, threshold,
     )
 
 

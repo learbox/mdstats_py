@@ -76,7 +76,7 @@ COLUMNS = ["序号", "日期", "时间", "使用卡组", "己方段位", "对方
 
 # 统计表格列（与 compute_stats 输出的字典键一致）
 STATS_COLUMNS = [
-    "卡组", "对局数", "胜", "负", "胜率",
+    "卡组", "对局数", "胜", "负", "平", "胜率",
     "赢硬币次数", "输硬币次数", "赢硬币概率",
     "赢硬币胜率", "输硬币胜率",
     "先攻次数", "后攻次数", "先攻胜", "后攻胜",
@@ -300,7 +300,7 @@ def add_record(
     _MAP = {
         "赢硬币": {"win": "是", "lose": "否"},
         "先后攻": {"first": "先攻", "second": "后攻"},
-        "结果":   {"win": "胜", "lose": "负"},
+        "结果":   {"win": "胜", "lose": "负", "draw": "平"},
         "段位升降": {"up": "升段", "down": "降段"},
     }
 
@@ -310,7 +310,7 @@ def add_record(
         mapped = _MAP[field].get(raw)
         if mapped is not None:
             return mapped
-        known_display = {"是", "否", "先攻", "后攻", "胜", "负"}
+        known_display = {"是", "否", "先攻", "后攻", "胜", "负", "平"}
         if raw not in known_display:
             import logging
             logging.getLogger("mdstats").warning(
@@ -410,6 +410,7 @@ def compute_stats(records: list[dict[str, str]]) -> list[dict[str, str | int]]:
         "total": 0,           # 总对局数
         "win": 0,             # 胜场数
         "lose": 0,            # 负场数
+        "draw": 0,            # 平局数
         "coin_win": 0,        # 赢硬币次数
         "coin_win_win": 0,    # 赢硬币且获胜次数
         "coin_lose": 0,       # 输硬币次数
@@ -428,6 +429,7 @@ def compute_stats(records: list[dict[str, str]]) -> list[dict[str, str | int]]:
     total_all = 0
     win_all = 0
     lose_all = 0
+    draw_all = 0
     coin_win_all = 0
     coin_win_win_all = 0
     coin_lose_all = 0
@@ -452,13 +454,16 @@ def compute_stats(records: list[dict[str, str]]) -> list[dict[str, str | int]]:
         d["total"] += 1
         total_all += 1
 
-        # 胜负统计
+        # 胜负平统计
         if result == "胜":
             d["win"] += 1
             win_all += 1
         elif result == "负":
             d["lose"] += 1
             lose_all += 1
+        elif result == "平":
+            d["draw"] += 1
+            draw_all += 1
 
         # 硬币输赢统计
         if coin_win_field == "是":
@@ -515,7 +520,7 @@ def compute_stats(records: list[dict[str, str]]) -> list[dict[str, str | int]]:
         d = decks[deck_name]
         stats.append({
             "卡组": deck_name,
-            "对局数": d["total"], "胜": d["win"], "负": d["lose"],
+            "对局数": d["total"], "胜": d["win"], "负": d["lose"], "平": d["draw"],
             "胜率": _rate(d["win"], d["total"]),
             "赢硬币次数": d["coin_win"],
             "输硬币次数": d["coin_lose"],
@@ -534,7 +539,7 @@ def compute_stats(records: list[dict[str, str]]) -> list[dict[str, str | int]]:
     # ---------- 总计行（始终放在最后） ----------
     stats.append({
         "卡组": "合计",
-        "对局数": total_all, "胜": win_all, "负": lose_all,
+        "对局数": total_all, "胜": win_all, "负": lose_all, "平": draw_all,
         "胜率": _rate(win_all, total_all),
         "赢硬币次数": coin_win_all,
         "输硬币次数": coin_lose_all,
@@ -584,10 +589,10 @@ def compute_rank_stats(
         return f"{win / total * 100:.1f}%"
 
     # 按大段分组计数：{段位: {"total":, "win":, "lose":}}
-    ranks: dict[str, dict] = {r: {"total": 0, "win": 0, "lose": 0} for r in rank_order}
-    ranks["未知"] = {"total": 0, "win": 0, "lose": 0}
+    ranks: dict[str, dict] = {r: {"total": 0, "win": 0, "lose": 0, "draw": 0} for r in rank_order}
+    ranks["未知"] = {"total": 0, "win": 0, "lose": 0, "draw": 0}
 
-    total_all = win_all = lose_all = 0
+    total_all = win_all = lose_all = draw_all = 0
 
     for r in records:
         if deck and r.get("使用卡组", "") != deck:
@@ -595,12 +600,16 @@ def compute_rank_stats(
         group = _tier_group(r.get("对方段位", ""))
         ranks[group]["total"] += 1
         total_all += 1
-        if r.get("结果", "") == "胜":
+        result = r.get("结果", "")
+        if result == "胜":
             ranks[group]["win"] += 1
             win_all += 1
-        else:
+        elif result == "负":
             ranks[group]["lose"] += 1
             lose_all += 1
+        elif result == "平":
+            ranks[group]["draw"] += 1
+            draw_all += 1
 
     stats = []
     for rank_name in rank_order + ["未知"]:
@@ -608,14 +617,14 @@ def compute_rank_stats(
         if d["total"] > 0 or rank_name == "未知":
             stats.append({
                 "段位": rank_name,
-                "对局数": d["total"], "胜": d["win"], "负": d["lose"],
+                "对局数": d["total"], "胜": d["win"], "负": d["lose"], "平": d["draw"],
                 "胜率": _rate(d["win"], d["total"]),
             })
 
     if total_all > 0:
         stats.append({
             "段位": "合计",
-            "对局数": total_all, "胜": win_all, "负": lose_all,
+            "对局数": total_all, "胜": win_all, "负": lose_all, "平": draw_all,
             "胜率": _rate(win_all, total_all),
         })
 
