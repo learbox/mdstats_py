@@ -141,6 +141,13 @@
        </widget>
       </item>
       <item>
+       <widget class="QPushButton" name="btn_manual_draw">
+        <property name="text">
+         <string>平</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QPushButton" name="btn_undo">
         <property name="text">
          <string>撤销</string>

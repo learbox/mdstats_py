@@ -81,6 +81,11 @@ class Ui_MainWindow(object):
 
         self.ctrlLayout.addWidget(self.btn_manual_lose)
 
+        self.btn_manual_draw = QPushButton(self.topPanel)
+        self.btn_manual_draw.setObjectName(u"btn_manual_draw")
+
+        self.ctrlLayout.addWidget(self.btn_manual_draw)
+
         self.btn_undo = QPushButton(self.topPanel)
         self.btn_undo.setObjectName(u"btn_undo")
         self.btn_undo.setVisible(False)
@@ -211,6 +216,7 @@ class Ui_MainWindow(object):
         self.btn_lock_deck.setText(QCoreApplication.translate("MainWindow", u"\u4fee\u6539\u5361\u7ec4", None))
         self.btn_manual_win.setText(QCoreApplication.translate("MainWindow", u"\u8d62\u786c\u5e01", None))
         self.btn_manual_lose.setText(QCoreApplication.translate("MainWindow", u"\u8f93\u786c\u5e01", None))
+        self.btn_manual_draw.setText(QCoreApplication.translate("MainWindow", u"\u5e73", None))
         self.btn_undo.setText(QCoreApplication.translate("MainWindow", u"\u64a4\u9500", None))
         self.btn_rank_stats.setText(QCoreApplication.translate("MainWindow", u"\u8be6\u7ec6\u7edf\u8ba1", None))
         self.btn_reload.setText(QCoreApplication.translate("MainWindow", u"\u52a0\u8f7d\u6570\u636e", None))

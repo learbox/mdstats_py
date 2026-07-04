@@ -915,9 +915,8 @@ class MainWindow(QMainWindow):
         self._deck_input       = _require_widget(content.findChild(QLineEdit, "deck_input"), "deck_input")
         self._btn_manual_win   = _require_widget(content.findChild(QPushButton, "btn_manual_win"), "btn_manual_win")
         self._btn_manual_lose  = _require_widget(content.findChild(QPushButton, "btn_manual_lose"), "btn_manual_lose")
-        self._btn_manual_draw  = QPushButton("平")          # 平局按钮，动态创建（.ui 中无此控件）
+        self._btn_manual_draw  = _require_widget(content.findChild(QPushButton, "btn_manual_draw"), "btn_manual_draw")
         self._btn_manual_draw.hide()
-        self._btn_manual_lose.parentWidget().layout().addWidget(self._btn_manual_draw)
         self._btn_undo         = _require_widget(content.findChild(QPushButton, "btn_undo"), "btn_undo")
         self._btn_lock_deck    = _require_widget(content.findChild(QPushButton, "btn_lock_deck"), "btn_lock_deck")
         self._btn_lock_deck.setText("锁定卡组")  # 初始: 输入框未锁定
