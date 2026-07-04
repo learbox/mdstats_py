@@ -45,7 +45,7 @@
 
 ## 模板图片
 
-`resource/templates/` 下按分辨率存放模板截图（必选 6 张 + 可选 2 张）。如果游戏分辨率不在已有目录中，需要新建对应文件夹并放入模板图片。
+`resource/templates/` 下按分辨率存放模板截图（必选 6 张 + 可选 3 张：段位升降×2 + 平局×1）。如果游戏分辨率不在已有目录中，需要新建对应文件夹并放入模板图片。
 
 > **段位图标需自行准备**：`rankicons/` 下的 9 张图片因版权未打包，需用 AssetRipper 从游戏资源中提取后放入对应目录（文件夹已创建），缺失时段位检测自动跳过。
 
@@ -70,6 +70,7 @@ resource/templates/
 │   ├── go_second.png       ← 后攻标识（必选）
 │   ├── victory.png         ← 胜利界面标识（必选）
 │   ├── defeat.png          ← 失败界面标识（必选）
+│   ├── draw.png            ← 平局界面标识（可选，暂缺模板）
 │   └── roi.toml            ← 搜索区域裁剪（可选）
 ├── 2560x1440/
 └── 3840x2160/
@@ -119,7 +120,7 @@ MDStats/
 │       ├── 1600x900/        # 1600×900 分辨率
 │       │   ├── coin_win.png / coin_lose.png   ← 赢/输硬币（必选）
 │       │   ├── go_first.png / go_second.png   ← 先攻/后攻（必选）
-│       │   ├── victory.png / defeat.png       ← 胜/负界面（必选）
+│       │   ├── victory.png / defeat.png / draw.png ← 胜/负/平界面（必选/可选）
 │       │   ├── rank_up.png / rank_down.png    ← 升段/降段（可选）
 │       │   └── roi.toml                       ← 搜索区域裁剪（可选）
 │       │
