@@ -31,8 +31,6 @@
     QListWidget  — 可滚动的列表控件
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTranslator, QLibraryInfo, Signal

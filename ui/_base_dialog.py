@@ -6,8 +6,6 @@
     - 鼠标拖拽移动
 """
 
-from __future__ import annotations
-
 import ctypes
 
 from PySide6.QtCore import QPoint, Qt

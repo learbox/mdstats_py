@@ -59,8 +59,6 @@
     下次打开面板时就会用新颜色。
 """
 
-from __future__ import annotations
-
 from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtGui import QKeyEvent, QMouseEvent
 from PySide6.QtWidgets import (

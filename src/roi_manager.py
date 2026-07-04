@@ -26,8 +26,6 @@
     save_icon_position(1920, 1080, "player", 77, 110, 179, 179)
 """
 
-from __future__ import annotations
-
 import tomllib
 
 from src.config import get_project_root

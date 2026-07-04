@@ -46,8 +46,6 @@ StatsWorker 和 RankWorker 运行在不同线程中，共用同一个管理器�
 每个 target 仅保留一个文件（磁盘上最多一个 PNG + 一个 TOML）。
 """
 
-from __future__ import annotations
-
 import threading
 from datetime import datetime
 from pathlib import Path

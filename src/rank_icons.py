@@ -41,8 +41,6 @@
         ["新手", "青铜", "白银", "黄金", "铂金", "钻石", "大师", "巅峰"]
 """
 
-from __future__ import annotations
-
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
 

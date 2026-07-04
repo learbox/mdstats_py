@@ -33,8 +33,6 @@ QGraphicsDropShadowEffect — 文字阴影特效
 Signal     — Qt 的信号机制：按钮被点击时发射信号，外部接收信号执行操作
 QPoint     — Qt 的"坐标点"（x, y），用来记录鼠标位置
 """
-from __future__ import annotations
-
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal, QPoint

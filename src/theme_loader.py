@@ -91,8 +91,6 @@ theme.toml 完整结构（以 macaron 主题为例）
                         theme.assets_dir) # 资源目录路径
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
