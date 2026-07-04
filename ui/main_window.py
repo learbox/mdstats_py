@@ -2183,8 +2183,8 @@ class MainWindow(QMainWindow):
                     if col == "卡组":
                         continue  # 卡组名已在标题行，不重复
                     keys = _ROW_KEY_MAP.get(col, (col,))
-                    if len(keys) == 2:
-                        val = f"{row.get(keys[0], 0)} / {row.get(keys[1], 0)}"
+                    if len(keys) > 1:
+                        val = " / ".join(str(row.get(k, 0)) for k in keys)
                     else:
                         val = row.get(keys[0], "")
                     lines.append(f"{col}\t{val}")
@@ -2196,11 +2196,10 @@ class MainWindow(QMainWindow):
                 vals = []
                 for c in columns:
                     keys = _ROW_KEY_MAP.get(c, (c,))
-                    if len(keys) == 2:
-                        vals.append(f"{row.get(keys[0], 0)} / {row.get(keys[1], 0)}")
+                    if len(keys) > 1:
+                        vals.append(" / ".join(str(row.get(k, 0)) for k in keys))
                     else:
-                        key = keys[0]
-                        vals.append(str(row.get(key, "")))
+                        vals.append(str(row.get(keys[0], "")))
                 lines.append("\t".join(vals))
             QApplication.clipboard().setText("\n".join(lines))
 
