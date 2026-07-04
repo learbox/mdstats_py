@@ -1,5 +1,20 @@
 # 更新日志
 
+## v1.12.0 (2026-07-04)
+
+### 新功能
+- **对局结果支持平局**：detect_result 加入 draw 模板，主界面阶段2 显示胜/负/平三按钮，统计加平局列
+
+### 修复
+- **剪切板/悬浮窗三值显示**：len(keys)==2 硬编码改为遍历，支持任意长度
+- **统计表格显示列不刷新**：_on_reload_config 补充 _reload_tables()
+- **悬浮窗简洁模式首次加载联动**：_load_config 显式调用 _set_sub_disabled
+
+### 代码质量
+- **平局按钮统一**：draw 按钮从代码创建改为 .ui 文件定义，与胜/负一致
+- **移除所有不必要的 from __future__ import annotations**
+- **config.py 文档补齐**：[stats]/[debug]/[notification]/[rank_detection] 段
+
 ## v1.11.0 (2026-07-04)
 
 ### 新功能
