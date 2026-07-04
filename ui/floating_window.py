@@ -431,9 +431,8 @@ class FloatingWindow(QWidget):
                 else:
                     self._values[i].setText(str(stats.get(key, "-")))
             else:
-                v1 = stats.get(keys[0], 0)
-                v2 = stats.get(keys[1], 0)
-                self._values[i].setText(f"{v1} / {v2}")
+                self._values[i].setText(
+                    " / ".join(str(stats.get(k, 0)) for k in keys))
 
     # ------------------------------------------------------------------
     # 隐藏任务栏图标（Win32 GWLP_HWNDPARENT 方案）
