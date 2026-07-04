@@ -31,6 +31,8 @@
 
     [floating_window]
     use_theme_bg = false          # 是否使用主题背景图（false=纯色，方便 OBS 绿幕）
+    show_status = false           # 底部显示状态消息（程序运行状态、识别进度等）
+    show_status_compact = false   #   简洁模式：只显示"——"前面部分（需勾选 show_status）
     width = 250                   # 悬浮窗宽度（像素）
     height = 300                  # 悬浮窗高度（像素）
     bg_color = "#BDEF0A"          # 悬浮窗背景色（十六进制 RGB）
