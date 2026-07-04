@@ -65,7 +65,7 @@ columns = ["卡组", "对局数", "胜", "负", "胜率", "赢硬币次数", "�
 # 剪贴板复制行为
 [clipboard]
 # 竖排模式：true = 每行"key\tvalue"，false = 横排 TSV
-vertical_layout = true
+vertical_layout = false
 # 复制范围："current" = 当前卡组，"all" = 全部卡组
 scope = "all"
 # 要复制的列名列表（空 = 默认 8 项）
