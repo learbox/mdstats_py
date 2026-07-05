@@ -1371,12 +1371,16 @@ class MainWindow(QMainWindow):
             QThread.msleep(50)
 
         # 超时兜底：3 秒还没退出 → 强制终止
-        if self._worker is not None and self._worker.isRunning():
-            self._worker.terminate()
-            self._worker.wait()
-        if self._rank_worker is not None and self._rank_worker.isRunning():
-            self._rank_worker.terminate()
-            self._rank_worker.wait()
+        # 先保存引用，因为 terminate() 会触发 finished 信号，
+        # _on_worker_finished 回调会把 self._worker 清为 None
+        w = self._worker
+        if w is not None and w.isRunning():
+            w.terminate()
+            w.wait()
+        r = self._rank_worker
+        if r is not None and r.isRunning():
+            r.terminate()
+            r.wait()
 
         self._snapshot_ctrl.unregister_hotkeys()
         self._reset_stage()                      # 重置状态机
