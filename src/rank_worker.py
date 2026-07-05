@@ -215,8 +215,11 @@ class RankWorker(QThread):
             try:
                 result = _det.detect_rank_icon(screenshot, self._threshold,
                                                skip_sides=skip or None)
-            except (cv2.error, ValueError):
-                result = {}  # 检测异常时返回空结果，下一轮重试
+            except (cv2.error, ValueError, RuntimeError):
+                # 检测异常时返回空结果，下一轮重试。
+                # RuntimeError: stop() → shutdown executor 后 detect_rank_icon
+                # 仍尝试 submit → "cannot schedule new futures after shutdown"
+                result = {}
 
             # 检测后检查 stop（detect_rank_icon 的 NCC 模板匹配可能耗时数百 ms）
             if not self._running:
