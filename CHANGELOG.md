@@ -1,5 +1,15 @@
 # 更新日志
 
+## v1.12.2 (2026-07-06)
+
+### 改进
+- **统计表格卡组按最近使用排序**：卡组按最后对局时间倒序排列（最新使用的在最上），替代原字符串排序
+
+### 修复
+- **停止按钮需两次点击**：RankWorker 停止时关闭并行线程池，避免 as_completed 阻塞
+- **terminate 竞态**：超时兜底的 terminate 触发 finished 信号清空 self._worker，先保存引用再 wait
+- **executor shutdown 竞态**：防御 stop 后 detect_rank_icon 仍在 submit 导致的 RuntimeError
+
 ## v1.12.1 (2026-07-05)
 
 ### 改进
