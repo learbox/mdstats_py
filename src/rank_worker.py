@@ -144,6 +144,11 @@ class RankWorker(QThread):
         _sleep 代替 msleep，stop() 后最多 50ms 退出。
         """
         self._running = False
+        # 关闭段位检测的并行线程池，不等剩余任务
+        import src.detector as _det
+        if _det._executor is not None:
+            _det._executor.shutdown(wait=False)
+            _det._executor = None  # 重置，下次 _get_executor() 会重建
 
     # =========================================================================
     # 线程主循环 — 在独立线程中运行，不能操作 UI
