@@ -405,6 +405,9 @@ def compute_stats(records: list[dict[str, str]]) -> list[dict[str, str | int]]:
             "升段胜率": "", "降段胜率": "",
         }]
 
+    # ---------- 记录每个卡组最后出现的位置（用于按时间倒序排列）----------
+    deck_order: dict[str, int] = {}
+
     # ---------- 初始化累加器 ----------
     decks: dict[str, dict] = defaultdict(lambda: {
         "total": 0,           # 总对局数
@@ -444,8 +447,9 @@ def compute_stats(records: list[dict[str, str]]) -> list[dict[str, str | int]]:
     rank_down_win_all = 0
 
     # ---------- 遍历所有记录，累加计数 ----------
-    for r in records:
+    for idx, r in enumerate(records):
         deck = r.get("使用卡组", "") or "(未指定)"
+        deck_order[deck] = idx          # 记录最后出现位置，用于按时间倒序排列
         result = r.get("结果", "")
         coin_win_field = r.get("赢硬币", "")
         turn = r.get("先后攻", "")
@@ -516,7 +520,7 @@ def compute_stats(records: list[dict[str, str]]) -> list[dict[str, str | int]]:
 
     # ---------- 组装输出 ----------
     stats = []
-    for deck_name in sorted(decks):
+    for deck_name in sorted(decks, key=lambda d: deck_order.get(d, -1), reverse=True):
         d = decks[deck_name]
         stats.append({
             "卡组": deck_name,
